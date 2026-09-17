@@ -1,0 +1,16 @@
+{
+    "generated_by": "php artisan error-codes:dump",
+    "validation_fallback": "validation.invalid",
+    "codes": [
+        "auth.forbidden",
+        "auth.unauthenticated",
+        "http.error",
+        "http.method_not_allowed",
+        "http.not_found",
+        "http.too_many_requests",
+        "identity.invalid_credentials",
+        "system.unexpected_error",
+        "validation.failed",
+        "validation.invalid"
+    ]
+}

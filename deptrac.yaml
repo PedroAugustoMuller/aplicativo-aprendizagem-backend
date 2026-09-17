@@ -1,0 +1,83 @@
+parameters:
+  paths:
+    - ./app
+  layers:
+    # --- layer axis -------------------------------------------------
+    - name: SharedDomain
+      collectors:
+        - type: directory
+          value: app/Shared/Domain/.*
+    - name: SharedInfrastructure
+      collectors:
+        - type: directory
+          value: app/Shared/Infrastructure/.*
+
+    - name: IdentityDomain
+      collectors:
+        - type: directory
+          value: app/Modules/Identity/Domain/.*
+    - name: IdentityApplication
+      collectors:
+        - type: directory
+          value: app/Modules/Identity/Application/.*
+    - name: IdentityInfrastructure
+      collectors:
+        - type: directory
+          value: app/Modules/Identity/(Infrastructure|Database)/.*
+        - type: class
+          value: App\\Modules\\Identity\\IdentityServiceProvider
+
+    - name: ContentDomain
+      collectors:
+        - type: directory
+          value: app/Modules/Content/Domain/.*
+    - name: ContentApplication
+      collectors:
+        - type: directory
+          value: app/Modules/Content/Application/.*
+    - name: ContentInfrastructure
+      collectors:
+        - type: directory
+          value: app/Modules/Content/(Infrastructure|Database)/.*
+        - type: class
+          value: App\\Modules\\Content\\ContentServiceProvider
+
+    - name: Vendor
+      collectors:
+        - type: classNameRegex
+          value: '#^(Illuminate|Symfony|Laravel|Carbon)\\.*#'
+
+  ruleset:
+    # Domain layers depend on nothing but their own shared kernel.
+    SharedDomain: ~
+    IdentityDomain:
+      - SharedDomain
+    ContentDomain:
+      - SharedDomain
+
+    # Application orchestrates its own domain. No framework.
+    IdentityApplication:
+      - IdentityDomain
+      - SharedDomain
+    ContentApplication:
+      - ContentDomain
+      - SharedDomain
+
+    # Infrastructure implements the contracts and may touch the framework.
+    IdentityInfrastructure:
+      - IdentityDomain
+      - IdentityApplication
+      - SharedDomain
+      - SharedInfrastructure
+      - Vendor
+    ContentInfrastructure:
+      - ContentDomain
+      - ContentApplication
+      - SharedDomain
+      - SharedInfrastructure
+      - Vendor
+    SharedInfrastructure:
+      - SharedDomain
+      - Vendor
+
+  skip_violations: []
