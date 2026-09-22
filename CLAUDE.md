@@ -30,11 +30,13 @@
   afterward does not reach an already-running container, even through
   `docker compose exec`. A second `up -d` (no `--build` needed) makes
   Compose notice the changed value and recreate just the `app` service.
-  Skipping this is silent: health checks, migrations, and the API's
-  Sanctum-only JSON routes all keep working with a stale/empty `APP_KEY`,
-  and only something that touches the encrypter — the `web` middleware
-  group's `EncryptCookies`, which `tests/Feature/ExampleTest.php` exercises
-  — fails, taking `composer quality` down with `MissingAppKeyException`.
+  An *empty* key is no longer silent: `docker/entrypoint.sh` refuses to
+  start `php-fpm` without one and the container crash-loops with the fix in
+  `docker compose logs app` (it once surfaced only as a 500 on bulk student
+  creation, the first API route that touches the encrypter). A *stale*
+  non-empty key is still silent — the check cannot know `.env` changed.
+  One-off `docker compose run --rm app ...` commands skip the check; that is
+  how a fresh setup generates the key before `up` (see `README.md`).
 
 ## Architecture
 

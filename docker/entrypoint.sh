@@ -17,6 +17,18 @@ fi
 
 php artisan config:clear
 
+# Only the server refuses to start: one-off commands such as
+# `docker compose run --rm app php artisan key:generate` must still work,
+# since that is how the key gets created in the first place.
+if [ "$1" = "php-fpm" ] && [ -z "${APP_KEY:-}" ]; then
+    echo "APP_KEY is empty in this container's environment - refusing to start php-fpm." >&2
+    echo "Without it, anything that touches the encrypter fails with MissingAppKeyException." >&2
+    echo "Fix: docker compose run --rm --no-deps app php artisan key:generate" >&2
+    echo "     UID=\$(id -u) GID=\$(id -g) docker compose up -d" >&2
+    echo "If .env already has a key, this container predates it: the 'up -d' alone recreates it." >&2
+    exit 1
+fi
+
 chown -R www-data:www-data storage bootstrap/cache
 chmod -R 775 storage bootstrap/cache
 

@@ -19,17 +19,20 @@ the host — every command below runs through `docker compose exec`.
 
 ```bash
 cp .env.example .env
-UID=$(id -u) GID=$(id -g) docker compose up -d --build
-docker compose exec -u www-data app php artisan key:generate
+UID=$(id -u) GID=$(id -g) docker compose build app
+docker compose run --rm --no-deps app php artisan key:generate
 UID=$(id -u) GID=$(id -g) docker compose up -d
 docker compose exec -u www-data app php artisan migrate --force
 docker compose exec -u www-data app php artisan db:seed --force
 curl http://localhost:8080/up
 ```
 
-The last command should print `{"status":"ok",...}`. This sequence was run
-from a clean `docker compose down -v` while writing this README — nothing
-here is aspirational, including the second `up -d`.
+The last command should return HTTP 200. The key is generated **before** the
+`app` container is created, through a throwaway `run` container, so the
+long-lived container starts with it already in its environment. That `run`
+has no `-u www-data` on purpose: on a fresh clone the entrypoint installs
+Composer dependencies and `chown`s them, which needs root; `key:generate`
+rewrites the existing `.env` in place, so the file keeps your ownership.
 
 `db:seed` now populates three things, in order: the subject catalogue
 (`SubjectsSeeder` — Química, Biologia, …), the chemistry topics
@@ -42,26 +45,23 @@ environments and no-ops elsewhere, so this step is local-only — production
 bootstraps its first admin with `identity:create-admin` instead (see the
 "Operations" section of this project's `CLAUDE.md`).
 
-**That second `up -d` is not optional, and skipping it produces a real,
-hard-to-notice failure.** `docker-compose.yml` loads `.env` into the `app`
-container's process environment via `env_file:`, and Docker fixes that
-environment when the container is *created*, not when the file on disk
-later changes. `.env.example` ships with `APP_KEY=` blank, so the first `up
---build` creates the container with an empty `APP_KEY` baked in. Running
-`key:generate` afterwards edits `.env` on disk — the key is genuinely
-different — but the already-running container's own environment still has
-the old, empty one; a `docker compose exec` into it inherits that same fixed
-environment, not a live read of the file. Nothing in this errors: the
-health check passes, migrate and seed succeed (they touch no encryption),
-and login/topics work too, because Sanctum's stateless API routes never
-touch the encrypter. What breaks silently is anything that does —
-`tests/Feature/ExampleTest.php`'s canary hits `/`, which runs the `web`
-middleware group's `EncryptCookies`, and dies with
-`MissingAppKeyException`, taking the whole `composer quality` gate down
-with it. Docker Compose recomputes each service's effective config
-(including `env_file`-sourced values) on every `up`, so a second `up -d` —
-no `--build` needed — detects the changed `APP_KEY` and recreates the `app`
-container with it, at no cost (Postgres/Redis/nginx/Mailpit are left alone).
+**`php-fpm` refuses to start with an empty `APP_KEY`.** `docker-compose.yml`
+loads `.env` into the `app` container's process environment via `env_file:`,
+and Docker fixes that environment when the container is *created*, not when
+the file on disk later changes. Before this check existed, a container
+created with the blank `APP_KEY=` from `.env.example` ran fine: the health
+check, migrate, seed, login and topics all work, because Sanctum's stateless
+API routes never touch the encrypter. Only what does touch it failed, with a
+`500 system.unexpected_error` (`MissingAppKeyException` in the log) — bulk
+student creation, which encrypts the temporary passwords in
+`pending_credentials`, and the `EncryptCookies` canary in
+`tests/Feature/ExampleTest.php`. So `docker/entrypoint.sh` now exits with an
+explanation instead of starting the server, and `restart: unless-stopped`
+keeps it visibly crash-looping (`docker compose logs app`). One-off
+commands (`docker compose run --rm app php artisan ...`) are not blocked,
+since that is how the key gets created. If `.env` already has a key but the
+container predates it, `UID=$(id -u) GID=$(id -g) docker compose up -d`
+recreates just `app` — Compose recomputes `env_file` values on every `up`.
 
 `UID`/`GID` are passed as Docker build args so the container's `www-data`
 user is remapped to match your host user (see the Dockerfile). Skip them and
