@@ -52,21 +52,25 @@
   directly off a narrow Eloquent `select()` — hydrating aggregates just to
   render a list is the cost this read model exists to avoid. See
   `TopicListReader` / `EloquentTopicListReader` for the pattern.
-- Every class is `final` unless it is one of the four abstract
+- Every class is `final` unless it is one of the five abstract
   `DomainException` bases, the abstract `Uuid` value object, or a framework
   base class Laravel itself generated non-final (e.g. `AppServiceProvider`).
 - `declare(strict_types=1);` at the top of every PHP file, no exceptions.
 - A module that has no failure mode of its own contributes **no** error
-  codes. `Content` has none today — that is correct, not something to
-  "complete."
+  codes — that is correct, not something to "complete." `Content` gained
+  its first ones (`ContentErrorCode`) once subjects introduced real
+  failure modes (not found, name taken).
 
 ## Errors
 
-- Every domain exception extends one of `UnauthenticatedException` (401),
-  `NotFoundException` (404), `ConflictException` (409),
-  `BusinessRuleException` (422). The base fixes the status; a concrete
-  exception never picks its own, so it cannot claim one status and return
-  another.
+- Every domain exception extends one of **five** bases: `UnauthenticatedException`
+  (401), `ForbiddenException` (403), `NotFoundException` (404),
+  `ConflictException` (409), `BusinessRuleException` (422). The base fixes the
+  status; a concrete exception never picks its own, so it cannot claim one
+  status and return another. 401 and 403 are kept deliberately distinct: the
+  frontend clears the session on 401 and never on 403, so a permission denial
+  must never be a 401 — the account is still authenticated, it just isn't
+  allowed to do that one thing.
 - Every error code is a case on a module's `ErrorCode` enum, registered in
   `config/error_codes.php`. After adding or changing one, run
   `docker compose exec -u www-data app php artisan error-codes:dump` (this
@@ -89,6 +93,67 @@
   which turns a 401 into a 500. Pinned by
   `ListTopicsTest::test_it_rejects_an_anonymous_request_with_no_accept_header`.
 
+## Authorization
+
+Every protected request goes through the same pipeline, in this order:
+
+1. `auth:sanctum` — valid token, or 401 `identity.account_deactivated`/
+   `auth.unauthenticated`.
+2. `account.active` (`EnsureAccountActive`) — a deactivated user is rejected
+   and their token revoked on the spot, even if it slipped through a race
+   window before revocation.
+3. `password.changed` (`EnsurePasswordChanged`) — while `must_change_password`
+   is true, only `GET /auth/me`, `POST /auth/logout` and `PUT /auth/password`
+   pass; everything else is 403 `identity.password_change_required`.
+4. `role:admin` / `role:staff` route middleware — the coarse gate.
+5. The handler's own policy check.
+
+**`role:*` is the early reject, the handler policy is the rule — every
+handler checks, even behind `role:admin`.** The route middleware only proves
+the actor has the right shape of account (an admin, someone on staff); it
+says nothing about whether *this* admin or *this* teacher may act on *this*
+classroom or *this* student. That finer-grained question is answered by a
+pure domain policy — `RosterPolicy` in `Identity`, `SubjectPolicy` in
+`Content` — which the handler calls directly. A handler that trusted
+`role:admin` alone and skipped its own policy would be correct today and
+wrong the day someone adds a second admin-adjacent role.
+
+`Actor` (`App\Shared\Domain\Auth\Actor`, a `UserId` plus a `Role`) is built
+per request by `App\Shared\Infrastructure\Http\ActorFactory` and passed into
+every command/query as a constructor argument — never resolved from or bound
+into the container, which is what keeps it Octane-safe.
+
+`tests/Feature/AuthorizationMatrixTest.php` is the executable form of the
+spec's permission matrix (design doc §4): one row per route, one status per
+actor shape (guest, student, unrelated teacher, assigned teacher, admin).
+**Adding a route that isn't one of the three `/auth/*` routes without adding
+a row there is an authorization gap, not a documentation nicety** — the
+matrix is what a reviewer runs, not what they read. `/auth/*` is exempt: it
+has no per-actor row because it isn't gated by role or ownership — `login`
+is open to anyone, and `me`/`logout`/`password` behave the same for every
+authenticated role. `tests/Feature/Modules/Identity/LoginTest.php` and
+`ChangePasswordTest.php` cover those.
+
+## Cross-module contracts
+
+`Identity` and `Content` never import each other's internals (module axis,
+enforced by deptrac — see Architecture above). Where one module's policy
+needs a fact that only the other owns, the contract lives in
+`app/Shared/Domain/Contract/` and the owning module binds an implementation:
+
+- `SubjectCatalog` — "is this subject id active?" `Content` owns subjects and
+  implements it (`EloquentSubjectCatalog`); bound in `ContentServiceProvider`.
+  `Identity` depends on it to validate a classroom's `subject_id`.
+- `TeachingAssignments` — "which subject ids does this user teach/is enrolled
+  in through an active classroom?" `Identity` owns classrooms and
+  implements it (`EloquentTeachingAssignments`); bound in
+  `IdentityServiceProvider`. `Content`'s `SubjectPolicy` depends on it to
+  decide who may view or author a subject's topics.
+
+Both interfaces live in `Shared`, not in the module that happens to consume
+them, because a future module (`Quiz`, `Scoring`) will need the same facts
+without either existing module importing it.
+
 ## Writes and retries
 
 - Any state-changing endpoint a client may retry must accept a
@@ -98,6 +163,25 @@
   submission the moment the network comes back (the offline requirements
   RNF03/RNF05), and a duplicate submission is a wrong score, not a cosmetic
   bug.
+- As implemented for every create endpoint under this task (subjects,
+  teachers, classrooms, bulk students): the client sends the id it wants
+  (`POST` body's `id`, a UUID). The same id with an equivalent payload
+  replays the original response (200, not 201, on the replay). The same id
+  with a *different* payload is a 409 `system.idempotency_conflict` — the
+  client asked to create two different things under one identifier, and
+  that is a bug in the client, not a case to silently resolve. Bulk student
+  creation applies the same rule per row inside one all-or-nothing
+  transaction. Deactivate/reactivate/enrol/unenrol/assign-teachers/`PATCH`
+  need no id trick: they are naturally idempotent by what they do.
+- Reset-password is idempotent through `pending_credentials`, not through a
+  client id: if a pending credential already exists, a reset returns it
+  instead of minting a new one (and does **not** revoke existing tokens
+  again); an explicit reset after the user has chosen their own password
+  always mints a fresh one.
+  `App\Modules\Identity\Application\Service\PasswordIssuer` is the **only**
+  producer of temporary passwords — every handler that issues or resets a
+  password goes through it, so "8 chars, excludes `0 O o 1 l I`,
+  `random_int`" is defined exactly once.
 
 ## Language
 
@@ -105,7 +189,19 @@
   **English**.
 - Portuguese appears only as seeded content data — the chemistry topic
   names and descriptions a teacher actually sees, e.g.
-  `ChemistryTopicsSeeder`.
+  `ChemistryTopicsSeeder`. The seeded dataset now spans several subjects, not
+  just chemistry: `SubjectsSeeder` creates the subject rows (Química,
+  Biologia, …) and `DevelopmentAccountsSeeder` creates the accounts, a
+  classroom and enrolments the frontend e2e suite logs into — see that
+  class's docblock for the exact ids/logins it is a contract with.
+
+## Operations
+
+- Production bootstrap has no seeded admin: run
+  `docker compose exec -u www-data app php artisan identity:create-admin
+  {name} {email}` once, against the real database. It refuses to run if any
+  admin already exists, so it cannot mint a second one by accident — every
+  other account is created by an existing admin through the API from then on.
 
 ## Octane-safe by default
 

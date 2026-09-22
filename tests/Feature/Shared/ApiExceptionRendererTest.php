@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Shared;
 
-use App\Modules\Identity\Database\Seeders\TeacherUserSeeder;
+use App\Modules\Identity\Database\Seeders\DevelopmentAccountsSeeder;
 use App\Shared\Domain\Exception\BusinessRuleException;
+use App\Shared\Domain\Exception\ForbiddenException;
 use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -166,7 +167,7 @@ final class ApiExceptionRendererTest extends TestCase
 
     public function test_a_unique_rule_does_not_leak_the_table_or_column_name(): void
     {
-        $this->seed(TeacherUserSeeder::class);
+        $this->seed(DevelopmentAccountsSeeder::class);
 
         Route::post('/api/v1/__test/unique-validation', function (Request $request) {
             $request->validate(['email' => ['required', 'unique:users,email']]);
@@ -183,6 +184,32 @@ final class ApiExceptionRendererTest extends TestCase
             ->assertJsonMissingPath('errors.email.0.params.arg1');
 
         self::assertStringNotContainsString('users', $response->getContent() ?: '');
+    }
+
+    public function test_a_forbidden_exception_returns_403_with_trace_id(): void
+    {
+        Route::get('/api/v1/__test/forbidden', function (): never {
+            throw new class extends ForbiddenException
+            {
+                public function errorCode(): string
+                {
+                    return 'auth.forbidden';
+                }
+
+                public function params(): array
+                {
+                    return [];
+                }
+            };
+        });
+
+        $response = $this->getJson('/api/v1/__test/forbidden');
+
+        $response->assertStatus(403)
+            ->assertJsonPath('error.code', 'auth.forbidden');
+
+        self::assertIsString($response->json('error.trace_id'));
+        self::assertNotEmpty($response->json('error.trace_id'));
     }
 
     public function test_non_api_requests_keep_laravel_default_handling(): void

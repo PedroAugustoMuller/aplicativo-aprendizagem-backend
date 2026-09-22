@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Modules\Content\Domain;
 
 use App\Modules\Content\Domain\Entity\Topic;
+use App\Modules\Content\Domain\ValueObject\SubjectId;
 use App\Modules\Content\Domain\ValueObject\TopicId;
 use App\Modules\Content\Domain\ValueObject\TopicName;
 use InvalidArgumentException;
@@ -15,9 +16,11 @@ final class TopicTest extends TestCase
     public function test_it_exposes_its_data(): void
     {
         $id = TopicId::random();
-        $topic = new Topic($id, new TopicName('Ligações Químicas'), 'Iônicas, covalentes e metálicas.', 4);
+        $subjectId = SubjectId::random();
+        $topic = new Topic($id, $subjectId, new TopicName('Ligações Químicas'), 'Iônicas, covalentes e metálicas.', 4);
 
         self::assertTrue($id->equals($topic->id()));
+        self::assertTrue($subjectId->equals($topic->subjectId()));
         self::assertSame('Ligações Químicas', $topic->name()->value());
         self::assertSame('Iônicas, covalentes e metálicas.', $topic->description());
         self::assertSame(4, $topic->position());
@@ -51,6 +54,6 @@ final class TopicTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        new Topic(TopicId::random(), new TopicName('Átomos'), '', -1);
+        new Topic(TopicId::random(), SubjectId::random(), new TopicName('Átomos'), '', -1);
     }
 }

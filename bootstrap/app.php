@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Modules\Identity\Infrastructure\Http\Middleware\EnsureAccountActive;
+use App\Modules\Identity\Infrastructure\Http\Middleware\EnsurePasswordChanged;
+use App\Modules\Identity\Infrastructure\Http\Middleware\EnsureRole;
 use App\Shared\Infrastructure\Console\DumpErrorCodesCommand;
 use App\Shared\Infrastructure\Http\ApiExceptionRenderer;
 use Illuminate\Foundation\Application;
@@ -22,6 +25,12 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->api(prepend: [
             'throttle:api',
+        ]);
+
+        $middleware->alias([
+            'account.active' => EnsureAccountActive::class,
+            'password.changed' => EnsurePasswordChanged::class,
+            'role' => EnsureRole::class,
         ]);
 
         // A pure API has no `login` route to redirect a guest to. Without this,

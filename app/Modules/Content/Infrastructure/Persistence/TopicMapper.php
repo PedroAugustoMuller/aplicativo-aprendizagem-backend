@@ -20,6 +20,7 @@ final class TopicMapper
     public function toAttributes(Topic $topic): array
     {
         return [
+            'subject_id' => $topic->subjectId()->value(),
             'name' => $topic->name()->value(),
             'description' => $topic->description(),
             'position' => $topic->position(),

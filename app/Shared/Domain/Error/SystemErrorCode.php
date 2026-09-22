@@ -7,6 +7,7 @@ namespace App\Shared\Domain\Error;
 enum SystemErrorCode: string implements ErrorCode
 {
     case UnexpectedError = 'system.unexpected_error';
+    case IdempotencyConflict = 'system.idempotency_conflict';
     case ValidationFailed = 'validation.failed';
     case ValidationInvalid = 'validation.invalid';
     case Unauthenticated = 'auth.unauthenticated';

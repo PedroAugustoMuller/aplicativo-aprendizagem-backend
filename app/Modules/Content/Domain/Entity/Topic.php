@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Content\Domain\Entity;
 
+use App\Modules\Content\Domain\ValueObject\SubjectId;
 use App\Modules\Content\Domain\ValueObject\TopicId;
 use App\Modules\Content\Domain\ValueObject\TopicName;
 use InvalidArgumentException;
@@ -12,6 +13,7 @@ final class Topic
 {
     public function __construct(
         private readonly TopicId $id,
+        private readonly SubjectId $subjectId,
         private readonly TopicName $name,
         private readonly string $description,
         private readonly int $position,
@@ -24,6 +26,11 @@ final class Topic
     public function id(): TopicId
     {
         return $this->id;
+    }
+
+    public function subjectId(): SubjectId
+    {
+        return $this->subjectId;
     }
 
     public function name(): TopicName

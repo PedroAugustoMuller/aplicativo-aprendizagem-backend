@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Content\Domain\Error\ContentErrorCode;
 use App\Modules\Identity\Domain\Error\IdentityErrorCode;
 use App\Shared\Domain\Error\SystemErrorCode;
 
@@ -13,5 +14,6 @@ return [
     'enums' => [
         SystemErrorCode::class,
         IdentityErrorCode::class,
+        ContentErrorCode::class,
     ],
 ];

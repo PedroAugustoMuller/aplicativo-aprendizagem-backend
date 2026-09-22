@@ -11,6 +11,7 @@ use App\Modules\Identity\Domain\Entity\User;
 use App\Modules\Identity\Domain\Exception\InvalidCredentialsException;
 use App\Modules\Identity\Domain\Repository\UserRepository;
 use App\Modules\Identity\Domain\ValueObject\Email;
+use App\Modules\Identity\Domain\ValueObject\Username;
 use InvalidArgumentException;
 
 final readonly class AuthenticateUserHandler
@@ -23,40 +24,49 @@ final readonly class AuthenticateUserHandler
 
     public function handle(AuthenticateUserCommand $command): AuthenticatedUser
     {
-        $user = $this->lookup($command->email);
+        $user = $this->lookup($command->login);
 
-        // Always verify, even with no match: an early return would let an attacker
-        // distinguish registered emails by response time.
+        // Always verify, even with no match or an inactive account: an early
+        // return would let an attacker tell accounts apart by response time.
         $matches = $this->hasher->verify(
             $command->password,
             $user?->password() ?? $this->hasher->dummyHash(),
         );
 
-        if (! $user instanceof User || ! $matches) {
+        if (! $user instanceof User || ! $matches || ! $user->isActive()) {
             throw new InvalidCredentialsException;
         }
 
         return new AuthenticatedUser(
             id: $user->id()->value(),
             name: $user->name(),
-            email: $user->email()->value(),
+            login: $user->login(),
+            role: $user->role()->value,
+            mustChangePassword: $user->mustChangePassword(),
             token: $this->tokens->issue($user->id()),
         );
     }
 
-    private function lookup(string $email): ?User
+    private function lookup(string $login): ?User
     {
-        // The try wraps ONLY the Email construction. If it also wrapped the
-        // repository call, an InvalidArgumentException thrown by a future
-        // repository bug would be silently reinterpreted as "no such user" and
-        // returned to the client as a routine 401 — hiding a real defect that
-        // should have surfaced as system.unexpected_error.
+        // Only the value-object construction is guarded, for the same reason as
+        // before: a repository bug must surface as a 500, not a routine 401.
+        if (str_contains($login, '@')) {
+            try {
+                $email = new Email($login);
+            } catch (InvalidArgumentException) {
+                return null;
+            }
+
+            return $this->users->findByEmail($email);
+        }
+
         try {
-            $address = new Email($email);
+            $username = new Username($login);
         } catch (InvalidArgumentException) {
             return null;
         }
 
-        return $this->users->findByEmail($address);
+        return $this->users->findByUsername($username);
     }
 }

@@ -12,7 +12,7 @@ final class CorsTest extends TestCase
     {
         config(['cors.allowed_origins' => ['http://localhost:5173']]);
 
-        $this->call('OPTIONS', '/api/v1/topics', server: [
+        $this->call('OPTIONS', '/api/v1/subjects', server: [
             'HTTP_ORIGIN' => 'http://localhost:5173',
             'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'GET',
         ])->assertHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
@@ -33,7 +33,7 @@ final class CorsTest extends TestCase
     {
         config(['cors.allowed_origins' => ['http://localhost:5173']]);
 
-        $response = $this->call('OPTIONS', '/api/v1/topics', server: [
+        $response = $this->call('OPTIONS', '/api/v1/subjects', server: [
             'HTTP_ORIGIN' => 'https://attacker.example',
             'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'GET',
         ]);
@@ -51,7 +51,7 @@ final class CorsTest extends TestCase
     {
         self::assertFalse(config('cors.supports_credentials'));
 
-        $this->call('OPTIONS', '/api/v1/topics', server: [
+        $this->call('OPTIONS', '/api/v1/subjects', server: [
             'HTTP_ORIGIN' => 'http://localhost:5173',
             'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'GET',
         ])->assertHeaderMissing('Access-Control-Allow-Credentials');

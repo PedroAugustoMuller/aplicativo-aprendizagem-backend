@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Modules\Content\Database\Seeders\ChemistryTopicsSeeder;
-use App\Modules\Identity\Database\Seeders\TeacherUserSeeder;
+use App\Modules\Content\Database\Seeders\SubjectsSeeder;
+use App\Modules\Identity\Database\Seeders\DevelopmentAccountsSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -19,8 +20,9 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            TeacherUserSeeder::class,
+            SubjectsSeeder::class,
             ChemistryTopicsSeeder::class,
+            DevelopmentAccountsSeeder::class,
         ]);
     }
 }

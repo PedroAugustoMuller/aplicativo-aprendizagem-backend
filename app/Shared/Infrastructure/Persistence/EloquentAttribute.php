@@ -21,4 +21,18 @@ final class EloquentAttribute
 
         return $value;
     }
+
+    /** Postgres drivers hand back count(*) and similar aggregates as numeric strings. */
+    public static function int(mixed $value, string $context): int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_string($value) && is_numeric($value)) {
+            return (int) $value;
+        }
+
+        throw new UnexpectedValueException(sprintf('Expected an int for %s.', $context));
+    }
 }

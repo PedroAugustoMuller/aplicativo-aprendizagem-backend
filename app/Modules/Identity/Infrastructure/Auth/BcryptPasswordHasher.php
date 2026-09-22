@@ -24,4 +24,9 @@ final class BcryptPasswordHasher implements PasswordHasher
         // would look equivalent and quietly defeat it.
         return new HashedPassword(Hash::make('never-matches-'.bin2hex(random_bytes(8))));
     }
+
+    public function hash(string $plain): HashedPassword
+    {
+        return new HashedPassword(Hash::make($plain));
+    }
 }

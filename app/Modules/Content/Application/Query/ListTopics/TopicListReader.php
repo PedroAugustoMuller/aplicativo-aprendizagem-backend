@@ -7,5 +7,5 @@ namespace App\Modules\Content\Application\Query\ListTopics;
 interface TopicListReader
 {
     /** @return list<TopicListItem> */
-    public function all(): array;
+    public function forSubject(string $subjectId): array;
 }

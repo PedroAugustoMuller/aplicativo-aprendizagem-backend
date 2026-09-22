@@ -4,10 +4,16 @@ declare(strict_types=1);
 
 namespace App\Modules\Content;
 
+use App\Modules\Content\Application\Query\ListSubjects\SubjectListReader;
 use App\Modules\Content\Application\Query\ListTopics\TopicListReader;
+use App\Modules\Content\Domain\Repository\SubjectRepository;
 use App\Modules\Content\Domain\Repository\TopicRepository;
+use App\Modules\Content\Infrastructure\Contract\EloquentSubjectCatalog;
+use App\Modules\Content\Infrastructure\Persistence\EloquentSubjectListReader;
+use App\Modules\Content\Infrastructure\Persistence\EloquentSubjectRepository;
 use App\Modules\Content\Infrastructure\Persistence\EloquentTopicListReader;
 use App\Modules\Content\Infrastructure\Persistence\EloquentTopicRepository;
+use App\Shared\Domain\Contract\SubjectCatalog;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -17,6 +23,9 @@ final class ContentServiceProvider extends ServiceProvider
     {
         $this->app->bind(TopicRepository::class, EloquentTopicRepository::class);
         $this->app->bind(TopicListReader::class, EloquentTopicListReader::class);
+        $this->app->bind(SubjectRepository::class, EloquentSubjectRepository::class);
+        $this->app->bind(SubjectListReader::class, EloquentSubjectListReader::class);
+        $this->app->bind(SubjectCatalog::class, EloquentSubjectCatalog::class);
     }
 
     public function boot(): void

@@ -31,6 +31,17 @@ The last command should print `{"status":"ok",...}`. This sequence was run
 from a clean `docker compose down -v` while writing this README — nothing
 here is aspirational, including the second `up -d`.
 
+`db:seed` now populates three things, in order: the subject catalogue
+(`SubjectsSeeder` — Química, Biologia, …), the chemistry topics
+(`ChemistryTopicsSeeder`), and a development accounts table
+(`DevelopmentAccountsSeeder`) — an admin, a teacher, and two students already
+enrolled in a classroom. That last seeder is a fixed-id contract with the
+frontend e2e suite; see its docblock before changing any of its logins.
+`DevelopmentAccountsSeeder` only runs in the `local` and `testing`
+environments and no-ops elsewhere, so this step is local-only — production
+bootstraps its first admin with `identity:create-admin` instead (see the
+"Operations" section of this project's `CLAUDE.md`).
+
 **That second `up -d` is not optional, and skipping it produces a real,
 hard-to-notice failure.** `docker-compose.yml` loads `.env` into the `app`
 container's process environment via `env_file:`, and Docker fixes that
@@ -57,21 +68,35 @@ user is remapped to match your host user (see the Dockerfile). Skip them and
 the bind mount fills with `www-data`-owned (not your host user's) files —
 usually root-equivalent, since the default UID/GID is 33.
 
-Seeded login: `ana@escola.br` / `password`. Try it:
+Seeded admin login: `ana@escola.br` / `password` (`login` is an email or a
+username — the field is always called `login`). Try it:
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" -H "Accept: application/json" \
-  -d '{"email":"ana@escola.br","password":"password"}'
+  -d '{"login":"ana@escola.br","password":"password"}'
 ```
 
-Copy the `data.token` from the response and use it to list the six seeded
-chemistry topics:
+Copy the `data.token` from the response and use it to list the seeded
+subjects, then a subject's chemistry topics:
 
 ```bash
-curl -s http://localhost:8080/api/v1/topics \
+curl -s http://localhost:8080/api/v1/subjects \
   -H "Accept: application/json" \
   -H "Authorization: Bearer <token>"
+
+curl -s "http://localhost:8080/api/v1/subjects/<subject-id>/topics" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer <token>"
+```
+
+The seeded student `diego.souza` / `Temp2345` still has `must_change_password:
+true` on every fresh seed — useful for exercising that pipeline stage by hand:
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" -H "Accept: application/json" \
+  -d '{"login":"diego.souza","password":"Temp2345"}'
 ```
 
 You do not need to send `Accept: application/json` for this to work — a bare
@@ -131,7 +156,7 @@ Every module follows the same four-layer shape:
 ```
 app/
 ├── Shared/                              cross-module contracts and infrastructure
-│   ├── Domain/                          ErrorCode, the four DomainException bases, Uuid
+│   ├── Domain/                          ErrorCode, the five DomainException bases, Uuid
 │   └── Infrastructure/
 │       ├── Http/                        ApiExceptionRenderer
 │       ├── Persistence/                 EloquentAttribute and other repository helpers
@@ -252,6 +277,65 @@ an omission waiting to be filled in.
    `Infrastructure` adds its own `Domain`+`Application`, `Shared`, and
    `Vendor`).
 
+## Endpoints
+
+All under `/api/v1`. Everything except `POST /auth/login` sits behind the
+pipeline described in the backend `CLAUDE.md`'s "Authorization" section
+(`auth:sanctum` → `account.active` → `password.changed` → route-level
+`role:*` → the handler's own policy). "Who" below is the *effective* rule
+after that policy runs, not just the route-level gate —
+`tests/Feature/AuthorizationMatrixTest.php` is the executable version of it.
+
+**Auth**
+
+| Method | Path | Who |
+|---|---|---|
+| POST | `/auth/login` | anyone (`login` is an email or a username) |
+| GET | `/auth/me` | any authenticated user |
+| POST | `/auth/logout` | any authenticated user |
+| PUT | `/auth/password` | any authenticated user |
+
+**Subjects** (Content)
+
+| Method | Path | Who |
+|---|---|---|
+| GET | `/subjects` | staff: all · student: their enrolled subjects |
+| POST | `/subjects` | admin |
+| PATCH | `/subjects/{id}` | admin |
+| POST | `/subjects/{id}/deactivate` | admin |
+| GET | `/subjects/{id}/topics` | staff: all · student: if enrolled in that subject |
+
+**Teachers** (Identity, admin only)
+
+| Method | Path |
+|---|---|
+| GET | `/teachers` |
+| POST | `/teachers` |
+| POST | `/teachers/{id}/reset-password` |
+| POST | `/teachers/{id}/deactivate` · `/reactivate` |
+
+**Classrooms** (Identity)
+
+| Method | Path | Who |
+|---|---|---|
+| GET | `/classrooms` | admin: all · teacher: assigned · student: enrolled |
+| POST | `/classrooms` | admin |
+| PATCH | `/classrooms/{id}` | admin |
+| PUT | `/classrooms/{id}/teachers` | admin |
+| POST | `/classrooms/{id}/deactivate` | admin |
+
+**Students** (Identity, admin or a teacher of the classroom)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/classrooms/{id}/students` | |
+| POST | `/classrooms/{id}/students` | 1–50 rows, one all-or-nothing transaction |
+| PUT | `/classrooms/{id}/students/{studentId}` | enrol an existing student |
+| DELETE | `/classrooms/{id}/students/{studentId}` | unenrol |
+| POST | `/students/{id}/reset-password` | |
+| POST | `/students/{id}/deactivate` · `/reactivate` | |
+| GET | `/classrooms/{id}/credentials` | pending slips: name, username, temporary password |
+
 ## Errors
 
 The API never returns human-readable text to a client. Every error is a
@@ -278,16 +362,23 @@ offline. Response shape:
 `trace_id` is what correlates a report from a user with a line in the
 server log.
 
-Every domain exception extends one of four abstract bases, and the base — not
-the concrete exception — fixes the HTTP status, so a concrete exception can
-never promise one status and return another:
+Every domain exception extends one of five abstract bases, and the base —
+not the concrete exception — fixes the HTTP status, so a concrete exception
+can never promise one status and return another:
 
 | Base | Status |
 |---|---|
 | `UnauthenticatedException` | 401 |
+| `ForbiddenException` | 403 |
 | `NotFoundException` | 404 |
 | `ConflictException` | 409 |
 | `BusinessRuleException` | 422 |
+
+401 and 403 are kept distinct on purpose: the frontend clears the local
+session on 401 (the token is no good any more) and must never do so on 403
+(the account is still valid, it just isn't allowed to do that one thing —
+e.g. a teacher hitting another teacher's classroom, or anyone but an admin
+hitting an admin-only route).
 
 `App\Shared\Infrastructure\Http\ApiExceptionRenderer` is the **only** place
 that formats an error response. Any `Throwable` it doesn't otherwise
