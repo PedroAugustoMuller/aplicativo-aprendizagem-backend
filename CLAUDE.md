@@ -2,11 +2,14 @@
 
 ## Non-negotiable
 
-- **Never run `git commit`** on the user's own branches. Leave changes
-  staged or in the working tree; the user commits. (The one exception is
-  inside a `.worktrees/*` process branch, where the root `CLAUDE.md`
-  explicitly says commits are the process — that exception does not apply
-  once the work lands back in the user's `backend` repository.)
+- **Commit after every completed task**, once `docker compose exec -u www-data app composer quality` passes.
+  Match the existing history: a single lowercase conventional-commit line
+  (`feat: ...`, `fix: ...`, `docs: ...`, `test: ...`), authored by the user's
+  git identity. **No AI attribution** — no `Co-Authored-By:` trailer, no
+  "Generated with" line, nothing that marks the commit as AI-written.
+  Design specs and implementation plans do not live here: they are written
+  and committed in the parent workspace repository
+  (`../docs/superpowers/{specs,plans}/`), see the root `CLAUDE.md`.
 - **Everything runs in Docker:** `docker compose exec -u www-data app <cmd>`.
   Never run `php` or `composer` on the host — nothing is installed there.
   The `-u www-data` is required, not cosmetic: the image declares no `USER`,
