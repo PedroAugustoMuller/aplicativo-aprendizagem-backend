@@ -23,4 +23,13 @@ final class UserModel extends Authenticatable
     protected $guarded = [];
 
     protected $hidden = ['password'];
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return [
+            'must_change_password' => 'boolean',
+            'deactivated_at' => 'immutable_datetime',
+        ];
+    }
 }

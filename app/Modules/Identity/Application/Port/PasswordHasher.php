@@ -21,4 +21,6 @@ interface PasswordHasher
      * enumerate registered addresses comes straight back.
      */
     public function dummyHash(): HashedPassword;
+
+    public function hash(string $plain): HashedPassword;
 }

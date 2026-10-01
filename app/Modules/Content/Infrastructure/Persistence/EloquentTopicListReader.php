@@ -15,12 +15,13 @@ use App\Shared\Infrastructure\Persistence\EloquentAttribute;
 final class EloquentTopicListReader implements TopicListReader
 {
     /** @return list<TopicListItem> */
-    public function all(): array
+    public function forSubject(string $subjectId): array
     {
         $items = [];
 
         foreach (TopicModel::query()
             ->select(['id', 'name', 'description', 'position'])
+            ->where('subject_id', $subjectId)
             ->orderBy('position')
             ->get() as $model) {
             $items[] = new TopicListItem(

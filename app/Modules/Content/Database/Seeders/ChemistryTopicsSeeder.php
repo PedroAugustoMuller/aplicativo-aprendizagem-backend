@@ -6,6 +6,7 @@ namespace App\Modules\Content\Database\Seeders;
 
 use App\Modules\Content\Domain\Entity\Topic;
 use App\Modules\Content\Domain\Repository\TopicRepository;
+use App\Modules\Content\Domain\ValueObject\SubjectId;
 use App\Modules\Content\Domain\ValueObject\TopicId;
 use App\Modules\Content\Domain\ValueObject\TopicName;
 use App\Modules\Content\Infrastructure\Persistence\TopicModel;
@@ -15,6 +16,9 @@ use Illuminate\Database\Seeder;
 /**
  * The chemistry syllabus taught to 9th grade at E.M.E.F. Dom Pedro II.
  * Topic text is Portuguese because it is content, not code.
+ *
+ * Requires SubjectsSeeder to have run first: it owns the Química row this
+ * seeder scopes every topic to.
  */
 final class ChemistryTopicsSeeder extends Seeder
 {
@@ -29,6 +33,8 @@ final class ChemistryTopicsSeeder extends Seeder
 
     public function run(TopicRepository $topics): void
     {
+        $subjectId = new SubjectId(SubjectsSeeder::CHEMISTRY_ID);
+
         foreach (self::TOPICS as [$name, $description, $position]) {
             $existing = TopicModel::query()->where('name', $name)->first();
 
@@ -36,6 +42,7 @@ final class ChemistryTopicsSeeder extends Seeder
                 $existing instanceof TopicModel
                     ? new TopicId(EloquentAttribute::string($existing->getKey(), 'topics.id'))
                     : TopicId::random(),
+                $subjectId,
                 new TopicName($name),
                 $description,
                 $position,

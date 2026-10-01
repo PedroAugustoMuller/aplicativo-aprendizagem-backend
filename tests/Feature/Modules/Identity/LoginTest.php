@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Modules\Identity;
 
-use App\Modules\Identity\Database\Seeders\TeacherUserSeeder;
+use App\Modules\Identity\Database\Seeders\DevelopmentAccountsSeeder;
+use App\Modules\Identity\Domain\ValueObject\UserId;
+use App\Modules\Identity\Infrastructure\Persistence\UserModel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\PersonalAccessToken;
 use Tests\TestCase;
 
@@ -16,20 +19,22 @@ final class LoginTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed(TeacherUserSeeder::class);
+        $this->seed(DevelopmentAccountsSeeder::class);
     }
 
     public function test_it_returns_a_token_for_valid_credentials(): void
     {
         $response = $this->postJson('/api/v1/auth/login', [
-            'email' => 'ana@escola.br',
+            'login' => 'ana@escola.br',
             'password' => 'password',
         ]);
 
         $response->assertOk()
-            ->assertJsonPath('data.email', 'ana@escola.br')
+            ->assertJsonPath('data.login', 'ana@escola.br')
             ->assertJsonPath('data.name', 'Professora Ana')
-            ->assertJsonStructure(['data' => ['id', 'name', 'email', 'token']]);
+            ->assertJsonPath('data.role', 'admin')
+            ->assertJsonPath('data.must_change_password', false)
+            ->assertJsonStructure(['data' => ['id', 'name', 'login', 'role', 'must_change_password', 'token']]);
 
         self::assertNotEmpty($response->json('data.token'));
     }
@@ -37,7 +42,7 @@ final class LoginTest extends TestCase
     public function test_it_rejects_a_wrong_password_with_the_domain_code(): void
     {
         $this->postJson('/api/v1/auth/login', [
-            'email' => 'ana@escola.br',
+            'login' => 'ana@escola.br',
             'password' => 'wrong',
         ])
             ->assertStatus(401)
@@ -47,7 +52,7 @@ final class LoginTest extends TestCase
     public function test_an_unknown_email_is_indistinguishable_from_a_wrong_password(): void
     {
         $this->postJson('/api/v1/auth/login', [
-            'email' => 'nobody@escola.br',
+            'login' => 'nobody@escola.br',
             'password' => 'password',
         ])
             ->assertStatus(401)
@@ -60,14 +65,14 @@ final class LoginTest extends TestCase
         $this->postJson('/api/v1/auth/login', [])
             ->assertStatus(422)
             ->assertJsonPath('error.code', 'validation.failed')
-            ->assertJsonPath('errors.email.0.code', 'validation.required')
+            ->assertJsonPath('errors.login.0.code', 'validation.required')
             ->assertJsonPath('errors.password.0.code', 'validation.required');
     }
 
     public function test_the_token_grants_access_to_the_current_user(): void
     {
         $token = $this->postJson('/api/v1/auth/login', [
-            'email' => 'ana@escola.br',
+            'login' => 'ana@escola.br',
             'password' => 'password',
         ])->json('data.token');
 
@@ -78,7 +83,9 @@ final class LoginTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/v1/auth/me')
             ->assertOk()
-            ->assertJsonPath('data.email', 'ana@escola.br');
+            ->assertJsonPath('data.login', 'ana@escola.br')
+            ->assertJsonPath('data.role', 'admin')
+            ->assertJsonPath('data.must_change_password', false);
     }
 
     public function test_a_missing_token_returns_the_unauthenticated_envelope(): void
@@ -91,7 +98,7 @@ final class LoginTest extends TestCase
     public function test_a_token_past_its_lifetime_is_rejected(): void
     {
         $token = $this->postJson('/api/v1/auth/login', [
-            'email' => 'ana@escola.br',
+            'login' => 'ana@escola.br',
             'password' => 'password',
         ])->json('data.token');
 
@@ -122,7 +129,7 @@ final class LoginTest extends TestCase
     public function test_logout_revokes_the_token(): void
     {
         $token = $this->postJson('/api/v1/auth/login', [
-            'email' => 'ana@escola.br',
+            'login' => 'ana@escola.br',
             'password' => 'password',
         ])->json('data.token');
 
@@ -153,5 +160,40 @@ final class LoginTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/v1/auth/me')
             ->assertStatus(401);
+    }
+
+    public function test_a_student_signs_in_with_username(): void
+    {
+        $this->insertStudent('bia.lima', 'secret-pass', mustChange: true);
+
+        $this->postJson('/api/v1/auth/login', ['login' => 'bia.lima', 'password' => 'secret-pass'])
+            ->assertOk()
+            ->assertJsonPath('data.role', 'student')
+            ->assertJsonPath('data.login', 'bia.lima')
+            ->assertJsonPath('data.must_change_password', true);
+    }
+
+    public function test_a_deactivated_account_gets_the_same_answer_as_a_wrong_password(): void
+    {
+        $this->insertStudent('bia.lima', 'secret-pass', mustChange: false, deactivated: true);
+
+        $this->postJson('/api/v1/auth/login', ['login' => 'bia.lima', 'password' => 'secret-pass'])
+            ->assertStatus(401)
+            ->assertJsonPath('error.code', 'identity.invalid_credentials')
+            ->assertJsonPath('error.params', []);
+    }
+
+    private function insertStudent(string $username, string $password, bool $mustChange, bool $deactivated = false): void
+    {
+        UserModel::query()->create([
+            'id' => UserId::random()->value(),
+            'name' => 'Bia Lima',
+            'role' => 'student',
+            'username' => $username,
+            'email' => null,
+            'password' => Hash::make($password),
+            'must_change_password' => $mustChange,
+            'deactivated_at' => $deactivated ? now() : null,
+        ]);
     }
 }

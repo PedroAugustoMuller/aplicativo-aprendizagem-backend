@@ -26,7 +26,7 @@ abstract class DomainException extends RuntimeException
     abstract public function params(): array;
 
     /**
-     * Fixed by the four abstract subclasses. Concrete exceptions never choose.
+     * Fixed by the five abstract subclasses. Concrete exceptions never choose.
      */
     abstract public function status(): int;
 }

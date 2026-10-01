@@ -48,6 +48,8 @@ parameters:
           value: '#^(Illuminate|Symfony|Laravel|Carbon)\\.*#'
 
   ruleset:
+    # Verified 2026-09-17: an Identity → Content (or Content → Identity) import
+    # fails this ruleset. Cross-module talk goes through app/Shared/Domain/Contract.
     # Domain layers depend on nothing but their own shared kernel.
     SharedDomain: ~
     IdentityDomain:

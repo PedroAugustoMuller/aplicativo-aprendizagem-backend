@@ -1,0 +1,25 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Identity\Infrastructure\Http\Request;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+final class CreateTeacherRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /** @return array<string, list<string>> */
+    public function rules(): array
+    {
+        return [
+            'id' => ['required', 'uuid'],
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['required', 'string', 'email', 'max:255'],
+        ];
+    }
+}

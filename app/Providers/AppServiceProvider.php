@@ -36,25 +36,46 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        RateLimiter::for('api', fn (Request $request) => Limit::perMinute(120)
-            ->by($request->user()?->getAuthIdentifier() ?? $request->ip()));
+        // Keying on $request->user() here would always fall back to the IP: this
+        // limiter is bound to the `api` middleware GROUP (prepended in
+        // bootstrap/app.php) which runs before the route-level `auth:sanctum`
+        // middleware ever authenticates the request, and the default guard
+        // (config/auth.php) is session-based `web`, not `sanctum` — so
+        // $request->user() is null here even for a request carrying a valid
+        // bearer token. Read the token straight off the request instead and key
+        // on a hash of it (never the raw token — it would otherwise sit in the
+        // cache store as a plaintext credential); anonymous requests still fall
+        // back to the IP. Do not "simplify" this back to $request->user().
+        RateLimiter::for('api', function (Request $request): Limit {
+            $token = $request->bearerToken();
+
+            return Limit::perMinute(120)->by(
+                is_string($token) ? 'token:'.hash('sha256', $token) : $request->ip(),
+            );
+        });
 
         // A classroom shares one public IP. Keying login on IP alone (the
         // previous `throttle:5,1` on the route) gives the whole class a
         // combined budget of five login attempts per minute. This combines
-        // two limits instead: a tight per-account bucket (email + IP) that
+        // two limits instead: a tight per-account bucket (login + IP) that
         // still caps brute-forcing one account at 5/minute, and a much wider
         // per-IP bucket that only trips if the same IP is hammering many
         // accounts — a real attack, not thirty students opening the app for
-        // a lesson. Email is lowercased/trimmed so case variants of the same
-        // address share one bucket instead of getting a fresh one each.
+        // a lesson. Email or username. Lowercased and trimmed so case variants
+        // share one bucket instead of getting a fresh one each.
         RateLimiter::for('login', function (Request $request): array {
-            $email = mb_strtolower(trim((string) $request->string('email')));
+            $login = mb_strtolower(trim((string) $request->string('login')));
 
             return [
-                Limit::perMinute(5)->by($email.'|'.$request->ip()),
+                Limit::perMinute(5)->by($login.'|'.$request->ip()),
                 Limit::perMinute(60)->by($request->ip()),
             ];
+        });
+
+        RateLimiter::for('password', function (Request $request): Limit {
+            $identifier = $request->user()?->getAuthIdentifier();
+
+            return Limit::perMinute(5)->by('password|'.(is_string($identifier) ? $identifier : $request->ip()));
         });
     }
 }

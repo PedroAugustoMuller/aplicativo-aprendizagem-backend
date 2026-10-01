@@ -22,4 +22,22 @@ final class EloquentAttributeTest extends TestCase
 
         EloquentAttribute::string(42, 'topics.id');
     }
+
+    public function test_a_numeric_string_value_is_cast_to_int(): void
+    {
+        self::assertSame(5, EloquentAttribute::int('5', 'classrooms.student_count'));
+    }
+
+    public function test_an_int_value_passes_through_unchanged(): void
+    {
+        self::assertSame(5, EloquentAttribute::int(5, 'classrooms.student_count'));
+    }
+
+    public function test_a_non_numeric_value_throws_with_the_context_in_the_message(): void
+    {
+        $this->expectException(UnexpectedValueException::class);
+        $this->expectExceptionMessage('Expected an int for classrooms.student_count.');
+
+        EloquentAttribute::int('not-a-number', 'classrooms.student_count');
+    }
 }

@@ -19,59 +19,84 @@ the host — every command below runs through `docker compose exec`.
 
 ```bash
 cp .env.example .env
-UID=$(id -u) GID=$(id -g) docker compose up -d --build
-docker compose exec -u www-data app php artisan key:generate
+UID=$(id -u) GID=$(id -g) docker compose build app
+docker compose run --rm --no-deps app php artisan key:generate
 UID=$(id -u) GID=$(id -g) docker compose up -d
 docker compose exec -u www-data app php artisan migrate --force
 docker compose exec -u www-data app php artisan db:seed --force
 curl http://localhost:8080/up
 ```
 
-The last command should print `{"status":"ok",...}`. This sequence was run
-from a clean `docker compose down -v` while writing this README — nothing
-here is aspirational, including the second `up -d`.
+The last command should return HTTP 200. The key is generated **before** the
+`app` container is created, through a throwaway `run` container, so the
+long-lived container starts with it already in its environment. That `run`
+has no `-u www-data` on purpose: on a fresh clone the entrypoint installs
+Composer dependencies and `chown`s them, which needs root; `key:generate`
+rewrites the existing `.env` in place, so the file keeps your ownership.
 
-**That second `up -d` is not optional, and skipping it produces a real,
-hard-to-notice failure.** `docker-compose.yml` loads `.env` into the `app`
-container's process environment via `env_file:`, and Docker fixes that
-environment when the container is *created*, not when the file on disk
-later changes. `.env.example` ships with `APP_KEY=` blank, so the first `up
---build` creates the container with an empty `APP_KEY` baked in. Running
-`key:generate` afterwards edits `.env` on disk — the key is genuinely
-different — but the already-running container's own environment still has
-the old, empty one; a `docker compose exec` into it inherits that same fixed
-environment, not a live read of the file. Nothing in this errors: the
-health check passes, migrate and seed succeed (they touch no encryption),
-and login/topics work too, because Sanctum's stateless API routes never
-touch the encrypter. What breaks silently is anything that does —
-`tests/Feature/ExampleTest.php`'s canary hits `/`, which runs the `web`
-middleware group's `EncryptCookies`, and dies with
-`MissingAppKeyException`, taking the whole `composer quality` gate down
-with it. Docker Compose recomputes each service's effective config
-(including `env_file`-sourced values) on every `up`, so a second `up -d` —
-no `--build` needed — detects the changed `APP_KEY` and recreates the `app`
-container with it, at no cost (Postgres/Redis/nginx/Mailpit are left alone).
+`db:seed` now populates three things, in order: the subject catalogue
+(`SubjectsSeeder` — Química, Biologia, …), the chemistry topics
+(`ChemistryTopicsSeeder`), and a development accounts table
+(`DevelopmentAccountsSeeder`) — an admin, a teacher, and two students already
+enrolled in a classroom. That last seeder is a fixed-id contract with the
+frontend e2e suite; see its docblock before changing any of its logins.
+`DevelopmentAccountsSeeder` only runs in the `local` and `testing`
+environments and no-ops elsewhere, so this step is local-only — production
+bootstraps its first admin with `identity:create-admin` instead (see the
+"Operations" section of this project's `CLAUDE.md`).
+
+**`php-fpm` refuses to start with an empty `APP_KEY`.** `docker-compose.yml`
+loads `.env` into the `app` container's process environment via `env_file:`,
+and Docker fixes that environment when the container is *created*, not when
+the file on disk later changes. Before this check existed, a container
+created with the blank `APP_KEY=` from `.env.example` ran fine: the health
+check, migrate, seed, login and topics all work, because Sanctum's stateless
+API routes never touch the encrypter. Only what does touch it failed, with a
+`500 system.unexpected_error` (`MissingAppKeyException` in the log) — bulk
+student creation, which encrypts the temporary passwords in
+`pending_credentials`, and the `EncryptCookies` canary in
+`tests/Feature/ExampleTest.php`. So `docker/entrypoint.sh` now exits with an
+explanation instead of starting the server, and `restart: unless-stopped`
+keeps it visibly crash-looping (`docker compose logs app`). One-off
+commands (`docker compose run --rm app php artisan ...`) are not blocked,
+since that is how the key gets created. If `.env` already has a key but the
+container predates it, `UID=$(id -u) GID=$(id -g) docker compose up -d`
+recreates just `app` — Compose recomputes `env_file` values on every `up`.
 
 `UID`/`GID` are passed as Docker build args so the container's `www-data`
 user is remapped to match your host user (see the Dockerfile). Skip them and
 the bind mount fills with `www-data`-owned (not your host user's) files —
 usually root-equivalent, since the default UID/GID is 33.
 
-Seeded login: `ana@escola.br` / `password`. Try it:
+Seeded admin login: `ana@escola.br` / `password` (`login` is an email or a
+username — the field is always called `login`). Try it:
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" -H "Accept: application/json" \
-  -d '{"email":"ana@escola.br","password":"password"}'
+  -d '{"login":"ana@escola.br","password":"password"}'
 ```
 
-Copy the `data.token` from the response and use it to list the six seeded
-chemistry topics:
+Copy the `data.token` from the response and use it to list the seeded
+subjects, then a subject's chemistry topics:
 
 ```bash
-curl -s http://localhost:8080/api/v1/topics \
+curl -s http://localhost:8080/api/v1/subjects \
   -H "Accept: application/json" \
   -H "Authorization: Bearer <token>"
+
+curl -s "http://localhost:8080/api/v1/subjects/<subject-id>/topics" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer <token>"
+```
+
+The seeded student `diego.souza` / `Temp2345` still has `must_change_password:
+true` on every fresh seed — useful for exercising that pipeline stage by hand:
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" -H "Accept: application/json" \
+  -d '{"login":"diego.souza","password":"Temp2345"}'
 ```
 
 You do not need to send `Accept: application/json` for this to work — a bare
@@ -131,7 +156,7 @@ Every module follows the same four-layer shape:
 ```
 app/
 ├── Shared/                              cross-module contracts and infrastructure
-│   ├── Domain/                          ErrorCode, the four DomainException bases, Uuid
+│   ├── Domain/                          ErrorCode, the five DomainException bases, Uuid
 │   └── Infrastructure/
 │       ├── Http/                        ApiExceptionRenderer
 │       ├── Persistence/                 EloquentAttribute and other repository helpers
@@ -252,6 +277,66 @@ an omission waiting to be filled in.
    `Infrastructure` adds its own `Domain`+`Application`, `Shared`, and
    `Vendor`).
 
+## Endpoints
+
+All under `/api/v1`. Everything except `POST /auth/login` sits behind the
+pipeline described in the backend `CLAUDE.md`'s "Authorization" section
+(`auth:sanctum` → `account.active` → `password.changed` → route-level
+`role:*` → the handler's own policy). "Who" below is the *effective* rule
+after that policy runs, not just the route-level gate —
+`tests/Feature/AuthorizationMatrixTest.php` is the executable version of it.
+
+**Auth**
+
+| Method | Path | Who |
+|---|---|---|
+| POST | `/auth/login` | anyone (`login` is an email or a username) |
+| GET | `/auth/me` | any authenticated user |
+| POST | `/auth/logout` | any authenticated user |
+| PUT | `/auth/password` | any authenticated user |
+
+**Subjects** (Content)
+
+| Method | Path | Who |
+|---|---|---|
+| GET | `/subjects` | staff: all · student: their enrolled subjects |
+| POST | `/subjects` | admin |
+| PATCH | `/subjects/{id}` | admin |
+| POST | `/subjects/{id}/deactivate` | admin |
+| GET | `/subjects/{id}/topics` | staff: all · student: if enrolled in that subject |
+
+**Teachers** (Identity, admin only)
+
+| Method | Path |
+|---|---|
+| GET | `/teachers` |
+| POST | `/teachers` |
+| POST | `/teachers/{id}/reset-password` |
+| POST | `/teachers/{id}/deactivate` · `/reactivate` |
+
+**Classrooms** (Identity)
+
+| Method | Path | Who |
+|---|---|---|
+| GET | `/classrooms` | admin: all · teacher: assigned · student: enrolled |
+| POST | `/classrooms` | admin |
+| PATCH | `/classrooms/{id}` | admin |
+| PUT | `/classrooms/{id}/teachers` | admin |
+| POST | `/classrooms/{id}/deactivate` | admin |
+
+**Students** (Identity, admin or a teacher of the classroom)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/classrooms/{id}/students` | |
+| POST | `/classrooms/{id}/students` | 1–50 rows, one all-or-nothing transaction |
+| PUT | `/classrooms/{id}/students/{studentId}` | enrol an existing student |
+| DELETE | `/classrooms/{id}/students/{studentId}` | unenrol |
+| POST | `/students/{id}/reset-password` | |
+| POST | `/students/{id}/deactivate` · `/reactivate` | |
+| GET | `/classrooms/{id}/credentials` | pending slips: name, username, temporary password |
+| GET | `/students?search=<text>` | staff; active students by name/username, ≤ 20, with their active classes |
+
 ## Errors
 
 The API never returns human-readable text to a client. Every error is a
@@ -278,16 +363,23 @@ offline. Response shape:
 `trace_id` is what correlates a report from a user with a line in the
 server log.
 
-Every domain exception extends one of four abstract bases, and the base — not
-the concrete exception — fixes the HTTP status, so a concrete exception can
-never promise one status and return another:
+Every domain exception extends one of five abstract bases, and the base —
+not the concrete exception — fixes the HTTP status, so a concrete exception
+can never promise one status and return another:
 
 | Base | Status |
 |---|---|
 | `UnauthenticatedException` | 401 |
+| `ForbiddenException` | 403 |
 | `NotFoundException` | 404 |
 | `ConflictException` | 409 |
 | `BusinessRuleException` | 422 |
+
+401 and 403 are kept distinct on purpose: the frontend clears the local
+session on 401 (the token is no good any more) and must never do so on 403
+(the account is still valid, it just isn't allowed to do that one thing —
+e.g. a teacher hitting another teacher's classroom, or anyone but an admin
+hitting an admin-only route).
 
 `App\Shared\Infrastructure\Http\ApiExceptionRenderer` is the **only** place
 that formats an error response. Any `Throwable` it doesn't otherwise
