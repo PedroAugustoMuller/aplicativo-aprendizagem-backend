@@ -42,6 +42,15 @@ final class RosterPolicyTest extends TestCase
         self::assertFalse($policy->canManageClassroom(new Actor($teacherId->value(), Role::Teacher), $otherClassroom));
     }
 
+    public function test_staff_may_search_students_and_students_may_not(): void
+    {
+        $policy = new RosterPolicy(new InMemoryClassroomRepository);
+
+        self::assertTrue($policy->canSearchStudents(new Actor('a', Role::Admin)));
+        self::assertTrue($policy->canSearchStudents(new Actor('t', Role::Teacher)));
+        self::assertFalse($policy->canSearchStudents(new Actor('s', Role::Student)));
+    }
+
     public function test_a_student_manages_no_classroom(): void
     {
         $policy = new RosterPolicy(new InMemoryClassroomRepository);

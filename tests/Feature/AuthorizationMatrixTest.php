@@ -52,6 +52,7 @@ final class AuthorizationMatrixTest extends TestCase
         yield 'deactivate student' => ['POST', '/students/{student}/deactivate', self::row(401, 403, 403, 200, 200)];
         yield 'reactivate student' => ['POST', '/students/{student}/reactivate', self::row(401, 403, 403, 200, 200)];
         yield 'credential slips' => ['GET', '/classrooms/{classroom}/credentials', self::row(401, 403, 403, 200, 200)];
+        yield 'search students' => ['GET', '/students?search=Al', self::row(401, 403, 200, 200, 200)];
     }
 
     /** @return array<string, int> */

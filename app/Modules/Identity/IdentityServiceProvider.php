@@ -11,6 +11,7 @@ use App\Modules\Identity\Application\Port\TokenRevoker;
 use App\Modules\Identity\Application\Port\TransactionManager;
 use App\Modules\Identity\Application\Query\ListClassrooms\ClassroomListReader;
 use App\Modules\Identity\Application\Query\ListTeachers\AccountListReader;
+use App\Modules\Identity\Application\Query\SearchStudents\StudentSearchReader;
 use App\Modules\Identity\Domain\Repository\ClassroomRepository;
 use App\Modules\Identity\Domain\Repository\UserRepository;
 use App\Modules\Identity\Infrastructure\Auth\BcryptPasswordHasher;
@@ -23,6 +24,7 @@ use App\Modules\Identity\Infrastructure\Persistence\DatabaseTransactionManager;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentAccountListReader;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentClassroomListReader;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentClassroomRepository;
+use App\Modules\Identity\Infrastructure\Persistence\EloquentStudentSearchReader;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentUserRepository;
 use App\Shared\Domain\Contract\TeachingAssignments;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +43,7 @@ final class IdentityServiceProvider extends ServiceProvider
         $this->app->bind(ClassroomRepository::class, EloquentClassroomRepository::class);
         $this->app->bind(ClassroomListReader::class, EloquentClassroomListReader::class);
         $this->app->bind(AccountListReader::class, EloquentAccountListReader::class);
+        $this->app->bind(StudentSearchReader::class, EloquentStudentSearchReader::class);
         $this->app->bind(TeachingAssignments::class, EloquentTeachingAssignments::class);
     }
 

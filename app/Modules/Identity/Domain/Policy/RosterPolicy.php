@@ -21,6 +21,15 @@ final readonly class RosterPolicy
             || ($actor->role === Role::Teacher && $classroom->isTaughtBy(new UserId($actor->userId)));
     }
 
+    /**
+     * Finding an existing student to enrol into another class. Any staff member:
+     * the Biologia teacher must find the students the Química class created.
+     */
+    public function canSearchStudents(Actor $actor): bool
+    {
+        return $actor->isStaff();
+    }
+
     /** A teacher manages a student if they teach ANY classroom the student is enrolled in. */
     public function canManageStudent(Actor $actor, UserId $studentId): bool
     {

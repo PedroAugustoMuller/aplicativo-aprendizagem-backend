@@ -335,6 +335,7 @@ after that policy runs, not just the route-level gate —
 | POST | `/students/{id}/reset-password` | |
 | POST | `/students/{id}/deactivate` · `/reactivate` | |
 | GET | `/classrooms/{id}/credentials` | pending slips: name, username, temporary password |
+| GET | `/students?search=<text>` | staff; active students by name/username, ≤ 20, with their active classes |
 
 ## Errors
 

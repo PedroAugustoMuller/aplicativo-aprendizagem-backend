@@ -22,9 +22,13 @@ use App\Modules\Identity\Application\Query\ListCredentials\ListCredentialsQuery;
 use App\Modules\Identity\Application\Query\ListStudents\ListStudentsHandler;
 use App\Modules\Identity\Application\Query\ListStudents\ListStudentsQuery;
 use App\Modules\Identity\Application\Query\ListTeachers\AccountListItem;
+use App\Modules\Identity\Application\Query\SearchStudents\SearchStudentsHandler;
+use App\Modules\Identity\Application\Query\SearchStudents\SearchStudentsQuery;
+use App\Modules\Identity\Application\Query\SearchStudents\StudentSearchResult;
 use App\Modules\Identity\Domain\Repository\UserRepository;
 use App\Modules\Identity\Domain\ValueObject\UserId;
 use App\Modules\Identity\Infrastructure\Http\Request\CreateStudentsRequest;
+use App\Modules\Identity\Infrastructure\Http\Request\SearchStudentsRequest;
 use App\Shared\Infrastructure\Http\ActorFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -99,6 +103,25 @@ final class StudentController
         $view = $handler->handle(new SetStudentActiveCommand($this->actors->fromRequest($request), $id, true));
 
         return new JsonResponse(['data' => $this->present($view)]);
+    }
+
+    /** Existing students to enrol into another class (spec: school-admin-screens §4). */
+    public function search(SearchStudentsRequest $request, SearchStudentsHandler $handler): JsonResponse
+    {
+        $results = $handler->handle(new SearchStudentsQuery(
+            $this->actors->fromRequest($request),
+            (string) $request->string('search'),
+        ));
+
+        return new JsonResponse(['data' => array_map(
+            fn (StudentSearchResult $result): array => [
+                'id' => $result->id,
+                'name' => $result->name,
+                'login' => $result->login,
+                'classrooms' => $result->classrooms,
+            ],
+            $results,
+        )]);
     }
 
     /**

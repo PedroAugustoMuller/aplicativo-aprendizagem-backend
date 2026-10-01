@@ -33,6 +33,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'password.changed'])->group
     });
 
     Route::middleware('role:staff')->group(function (): void {
+        Route::get('/students', [StudentController::class, 'search']);
         Route::get('/classrooms/{id}/students', [StudentController::class, 'index'])->whereUuid('id');
         Route::post('/classrooms/{id}/students', [StudentController::class, 'store'])->whereUuid('id');
         Route::get('/classrooms/{id}/credentials', [StudentController::class, 'credentials'])->whereUuid('id');
