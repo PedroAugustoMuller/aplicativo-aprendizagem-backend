@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Tests\Integration\Modules\Identity;
 
 use App\Modules\Identity\Domain\Entity\Classroom;
+use App\Modules\Identity\Domain\Entity\User;
 use App\Modules\Identity\Domain\Repository\ClassroomRepository;
+use App\Modules\Identity\Domain\Repository\UserRepository;
+use App\Modules\Identity\Domain\ValueObject\ClassroomId;
+use App\Modules\Identity\Domain\ValueObject\ClassroomName;
 use App\Modules\Identity\Domain\ValueObject\UserId;
 use App\Modules\Identity\Infrastructure\Persistence\UserModel;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
@@ -86,6 +90,86 @@ final class EloquentClassroomRepositoryTest extends TestCase
 
         self::assertCount(5, $found);
         self::assertLessThanOrEqual(3, $queryCount);
+    }
+
+    /*
+     * Two requests that load the same classroom before either saves (two
+     * teachers adding students at once, a teacher enrolling while the admin
+     * renames) must both land. save() writes what changed, not a snapshot.
+     */
+    public function test_concurrent_enrolments_in_one_classroom_are_both_kept(): void
+    {
+        $classroomId = $this->classroom($this->subject(), 'Química 1');
+        $ana = $this->user('student');
+        $bia = $this->user('student');
+
+        $first = $this->load($classroomId);
+        $second = $this->load($classroomId);
+        $first->enrol($this->domainUser($ana));
+        $second->enrol($this->domainUser($bia));
+        $this->repository()->save($first);
+        $this->repository()->save($second);
+
+        $stored = $this->load($classroomId);
+        self::assertTrue($stored->hasStudent(new UserId($this->id($ana))));
+        self::assertTrue($stored->hasStudent(new UserId($this->id($bia))));
+    }
+
+    public function test_an_enrolment_does_not_undo_a_concurrent_unenrolment(): void
+    {
+        $classroomId = $this->classroom($this->subject(), 'Química 1');
+        $ana = $this->user('student');
+        $caio = $this->user('student');
+        DB::table('classroom_students')->insert(['classroom_id' => $classroomId, 'user_id' => $ana->getKey()]);
+
+        $first = $this->load($classroomId);
+        $second = $this->load($classroomId);
+        $first->unenrol(new UserId($this->id($ana)));
+        $second->enrol($this->domainUser($caio));
+        $this->repository()->save($first);
+        $this->repository()->save($second);
+
+        $stored = $this->load($classroomId);
+        self::assertFalse($stored->hasStudent(new UserId($this->id($ana))));
+        self::assertTrue($stored->hasStudent(new UserId($this->id($caio))));
+    }
+
+    public function test_an_enrolment_does_not_undo_a_concurrent_rename_or_teacher_assignment(): void
+    {
+        $classroomId = $this->classroom($this->subject(), 'Química 1');
+        $teacher = $this->user('teacher');
+        $ana = $this->user('student');
+
+        $renamed = $this->load($classroomId);
+        $staffed = $this->load($classroomId);
+        $enrolled = $this->load($classroomId);
+        $renamed->rename(new ClassroomName('Química A'));
+        $staffed->assignTeachers([$this->domainUser($teacher)]);
+        $enrolled->enrol($this->domainUser($ana));
+        $this->repository()->save($renamed);
+        $this->repository()->save($staffed);
+        $this->repository()->save($enrolled);
+
+        $stored = $this->load($classroomId);
+        self::assertSame('Química A', $stored->name()->value());
+        self::assertTrue($stored->isTaughtBy(new UserId($this->id($teacher))));
+        self::assertTrue($stored->hasStudent(new UserId($this->id($ana))));
+    }
+
+    private function load(string $classroomId): Classroom
+    {
+        $classroom = $this->repository()->findById(new ClassroomId($classroomId));
+        self::assertNotNull($classroom);
+
+        return $classroom;
+    }
+
+    private function domainUser(UserModel $model): User
+    {
+        $user = $this->app->make(UserRepository::class)->findById(new UserId($this->id($model)));
+        self::assertNotNull($user);
+
+        return $user;
     }
 
     private function repository(): ClassroomRepository

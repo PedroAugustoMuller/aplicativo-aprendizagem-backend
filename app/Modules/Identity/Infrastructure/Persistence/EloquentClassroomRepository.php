@@ -75,22 +75,42 @@ final class EloquentClassroomRepository implements ClassroomRepository
 
     public function save(Classroom $classroom): void
     {
+        // Only what this request changed is written: another request may have
+        // changed the same classroom since this one loaded it, and writing the
+        // whole snapshot back would silently undo that (lost update).
         DB::transaction(function () use ($classroom): void {
-            ClassroomModel::query()->updateOrCreate(
-                ['id' => $classroom->id()->value()],
-                $this->mapper->toAttributes($classroom),
-            );
+            $classroomId = $classroom->id()->value();
 
-            $this->syncPivot('classroom_teachers', $classroom->id()->value(), array_map(
-                static fn (UserId $id): string => $id->value(),
-                $classroom->teacherIds(),
-            ));
+            if ($classroom->isNew() || $classroom->detailsChanged()) {
+                ClassroomModel::query()->updateOrCreate(['id' => $classroomId], $this->mapper->toAttributes($classroom));
+            }
 
-            $this->syncPivot('classroom_students', $classroom->id()->value(), array_map(
-                static fn (UserId $id): string => $id->value(),
-                $classroom->studentIds(),
-            ));
+            if ($classroom->isNew() || $classroom->teachersChanged()) {
+                $this->syncPivot('classroom_teachers', $classroomId, self::values($classroom->teacherIds()));
+            }
+
+            $removed = self::values($classroom->unenrolledStudentIds());
+            if ($removed !== []) {
+                DB::table('classroom_students')->where('classroom_id', $classroomId)->whereIn('user_id', $removed)->delete();
+            }
+
+            $added = self::values($classroom->enrolledStudentIds());
+            if ($added !== []) {
+                DB::table('classroom_students')->insertOrIgnore(array_map(
+                    static fn (string $userId): array => ['classroom_id' => $classroomId, 'user_id' => $userId],
+                    $added,
+                ));
+            }
         });
+    }
+
+    /**
+     * @param  list<UserId>  $ids
+     * @return list<string>
+     */
+    private static function values(array $ids): array
+    {
+        return array_map(static fn (UserId $id): string => $id->value(), $ids);
     }
 
     /** @param  list<string>  $userIds */

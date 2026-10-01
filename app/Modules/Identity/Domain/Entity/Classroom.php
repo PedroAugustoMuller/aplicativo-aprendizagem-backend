@@ -14,6 +14,23 @@ use InvalidArgumentException;
 
 final class Classroom
 {
+    /*
+     * What changed since this instance was created or restored. Persistence
+     * writes these deltas, never the whole snapshot: two requests that loaded
+     * the same classroom (two teachers adding students at once, a teacher
+     * enrolling while the admin renames) must not erase each other's changes.
+     */
+
+    /** @var array<string, UserId> */
+    private array $enrolled = [];
+
+    /** @var array<string, UserId> */
+    private array $unenrolled = [];
+
+    private bool $teachersChanged = false;
+
+    private bool $detailsChanged = false;
+
     /**
      * @param  array<string, UserId>  $teachers  keyed by id value
      * @param  array<string, UserId>  $students  keyed by id value
@@ -25,11 +42,12 @@ final class Classroom
         private array $teachers,
         private array $students,
         private ?DateTimeImmutable $deactivatedAt,
+        private readonly bool $isNew,
     ) {}
 
     public static function create(ClassroomId $id, ClassroomName $name, string $subjectId): self
     {
-        return new self($id, $name, $subjectId, [], [], null);
+        return new self($id, $name, $subjectId, [], [], null, true);
     }
 
     /**
@@ -38,7 +56,7 @@ final class Classroom
      */
     public static function restore(ClassroomId $id, ClassroomName $name, string $subjectId, array $teacherIds, array $studentIds, ?DateTimeImmutable $deactivatedAt): self
     {
-        return new self($id, $name, $subjectId, self::index($teacherIds), self::index($studentIds), $deactivatedAt);
+        return new self($id, $name, $subjectId, self::index($teacherIds), self::index($studentIds), $deactivatedAt, false);
     }
 
     public function id(): ClassroomId
@@ -81,11 +99,13 @@ final class Classroom
     public function rename(ClassroomName $name): void
     {
         $this->name = $name;
+        $this->detailsChanged = true;
     }
 
     public function changeSubject(string $subjectId): void
     {
         $this->subjectId = $subjectId;
+        $this->detailsChanged = true;
     }
 
     /** @param  list<User>  $teachers */
@@ -98,6 +118,7 @@ final class Classroom
         }
 
         $this->teachers = self::index(array_map(fn (User $t): UserId => $t->id(), $teachers));
+        $this->teachersChanged = true;
     }
 
     public function enrol(User $student): void
@@ -106,12 +127,17 @@ final class Classroom
             throw new EnrolmentRequiresActiveStudentException;
         }
 
-        $this->students[$student->id()->value()] = $student->id();
+        $key = $student->id()->value();
+        $this->students[$key] = $student->id();
+        $this->enrolled[$key] = $student->id();
+        unset($this->unenrolled[$key]);
     }
 
     public function unenrol(UserId $studentId): void
     {
-        unset($this->students[$studentId->value()]);
+        $key = $studentId->value();
+        unset($this->students[$key], $this->enrolled[$key]);
+        $this->unenrolled[$key] = $studentId;
     }
 
     public function isTaughtBy(UserId $userId): bool
@@ -127,7 +153,40 @@ final class Classroom
     /** Idempotent: deactivating an already-inactive classroom keeps the first timestamp. */
     public function deactivate(DateTimeImmutable $at): void
     {
-        $this->deactivatedAt ??= $at;
+        if ($this->deactivatedAt === null) {
+            $this->deactivatedAt = $at;
+            $this->detailsChanged = true;
+        }
+    }
+
+    /** Created in this request: everything about it must be written. */
+    public function isNew(): bool
+    {
+        return $this->isNew;
+    }
+
+    /** Name, subject or deactivation changed since it was loaded. */
+    public function detailsChanged(): bool
+    {
+        return $this->detailsChanged;
+    }
+
+    /** The teacher list was replaced since it was loaded. */
+    public function teachersChanged(): bool
+    {
+        return $this->teachersChanged;
+    }
+
+    /** @return list<UserId> students enrolled since it was loaded */
+    public function enrolledStudentIds(): array
+    {
+        return array_values($this->enrolled);
+    }
+
+    /** @return list<UserId> students unenrolled since it was loaded */
+    public function unenrolledStudentIds(): array
+    {
+        return array_values($this->unenrolled);
     }
 
     /**

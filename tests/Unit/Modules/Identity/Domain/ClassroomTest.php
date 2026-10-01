@@ -74,6 +74,52 @@ final class ClassroomTest extends TestCase
         return Classroom::create(ClassroomId::random(), new ClassroomName('Química 1'), '0190a2b4-0000-7000-8000-000000000001');
     }
 
+    public function test_a_restored_classroom_reports_no_changes(): void
+    {
+        $classroom = Classroom::restore(ClassroomId::random(), new ClassroomName('Química 1'), '0190a2b4-0000-7000-8000-000000000001', [], [], null);
+
+        self::assertFalse($classroom->isNew());
+        self::assertFalse($classroom->detailsChanged());
+        self::assertFalse($classroom->teachersChanged());
+        self::assertSame([], $classroom->enrolledStudentIds());
+        self::assertSame([], $classroom->unenrolledStudentIds());
+    }
+
+    public function test_it_tracks_enrolments_and_unenrolments_since_it_was_loaded(): void
+    {
+        $bia = User::student(UserId::random(), 'Bia', new Username('bia'), $this->hash(), true);
+        $caio = User::student(UserId::random(), 'Caio', new Username('caio'), $this->hash(), true);
+        $classroom = Classroom::restore(ClassroomId::random(), new ClassroomName('Química 1'), '0190a2b4-0000-7000-8000-000000000001', [], [$caio->id()], null);
+
+        $classroom->enrol($bia);
+        $classroom->unenrol($caio->id());
+
+        self::assertEquals([$bia->id()], $classroom->enrolledStudentIds());
+        self::assertEquals([$caio->id()], $classroom->unenrolledStudentIds());
+    }
+
+    public function test_enrolling_then_unenrolling_the_same_student_leaves_only_the_unenrolment(): void
+    {
+        $bia = User::student(UserId::random(), 'Bia', new Username('bia'), $this->hash(), true);
+        $classroom = Classroom::create(ClassroomId::random(), new ClassroomName('Química 1'), '0190a2b4-0000-7000-8000-000000000001');
+
+        $classroom->enrol($bia);
+        $classroom->unenrol($bia->id());
+
+        self::assertTrue($classroom->isNew());
+        self::assertSame([], $classroom->enrolledStudentIds());
+        self::assertEquals([$bia->id()], $classroom->unenrolledStudentIds());
+    }
+
+    public function test_deactivating_twice_changes_details_once(): void
+    {
+        $classroom = Classroom::restore(ClassroomId::random(), new ClassroomName('Química 1'), '0190a2b4-0000-7000-8000-000000000001', [], [], new DateTimeImmutable('2026-01-01'));
+
+        $classroom->deactivate(new DateTimeImmutable('2026-02-01'));
+
+        self::assertFalse($classroom->detailsChanged());
+    }
+
     private function hash(): HashedPassword
     {
         return new HashedPassword('$2y$04$x');
