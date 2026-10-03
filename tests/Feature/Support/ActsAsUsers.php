@@ -70,4 +70,22 @@ trait ActsAsUsers
 
         return $id;
     }
+
+    protected function makeQuestion(string $topicId): string
+    {
+        $id = (string) Str::uuid7();
+        DB::table('questions')->insert([
+            'id' => $id, 'topic_id' => $topicId, 'type' => 'true_false', 'statement' => 'O sódio é um metal.',
+            'explanation' => null, 'version' => 1, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        foreach ([['Verdadeiro', true], ['Falso', false]] as $position => [$text, $correct]) {
+            DB::table('question_options')->insert([
+                'id' => (string) Str::uuid7(), 'question_id' => $id, 'text' => $text, 'is_correct' => $correct,
+                'position' => $position, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        return $id;
+    }
 }

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Content\Infrastructure\Http\Controller\QuestionController;
 use App\Modules\Content\Infrastructure\Http\Controller\SubjectController;
 use App\Modules\Content\Infrastructure\Http\Controller\TopicController;
 use Illuminate\Support\Facades\Route;
@@ -24,5 +25,10 @@ Route::middleware(['auth:sanctum', 'account.active', 'password.changed'])->group
         Route::post('/topics/{id}/deactivate', [TopicController::class, 'deactivate'])->whereUuid('id');
         Route::post('/topics/{id}/reactivate', [TopicController::class, 'reactivate'])->whereUuid('id');
         Route::put('/subjects/{id}/topics/order', [TopicController::class, 'reorder'])->whereUuid('id');
+        Route::get('/topics/{id}/questions', [QuestionController::class, 'index'])->whereUuid('id');
+        Route::post('/topics/{id}/questions', [QuestionController::class, 'store'])->whereUuid('id');
+        Route::put('/questions/{id}', [QuestionController::class, 'update'])->whereUuid('id');
+        Route::post('/questions/{id}/deactivate', [QuestionController::class, 'deactivate'])->whereUuid('id');
+        Route::post('/questions/{id}/reactivate', [QuestionController::class, 'reactivate'])->whereUuid('id');
     });
 });
