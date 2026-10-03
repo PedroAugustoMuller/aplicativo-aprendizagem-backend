@@ -88,4 +88,29 @@ trait ActsAsUsers
 
         return $id;
     }
+
+    /**
+     * @param  list<array{string, bool}>  $options  text and whether it is the correct one
+     * @return array{id: string, options: list<string>} the question id and its option ids in position order
+     */
+    protected function makeQuestionWithOptions(string $topicId, array $options, string $type = 'multiple_choice', ?string $explanation = 'Explicação.'): array
+    {
+        $id = (string) Str::uuid7();
+        DB::table('questions')->insert([
+            'id' => $id, 'topic_id' => $topicId, 'type' => $type, 'statement' => 'Pergunta '.$id,
+            'explanation' => $explanation, 'version' => 1, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $optionIds = [];
+
+        foreach ($options as $position => [$text, $correct]) {
+            $optionIds[] = $optionId = (string) Str::uuid7();
+            DB::table('question_options')->insert([
+                'id' => $optionId, 'question_id' => $id, 'text' => $text, 'is_correct' => $correct,
+                'position' => $position, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        return ['id' => $id, 'options' => $optionIds];
+    }
 }
