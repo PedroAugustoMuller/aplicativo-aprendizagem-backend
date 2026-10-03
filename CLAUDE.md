@@ -154,6 +154,10 @@ needs a fact that only the other owns, the contract lives in
   implements it (`EloquentTeachingAssignments`); bound in
   `IdentityServiceProvider`. `Content`'s `SubjectPolicy` depends on it to
   decide who may view or author a subject's topics.
+- `QuestionBank` — "what is this topic (subject, still available?) and which
+  active questions, with options and the correct one, does it hold?" `Content`
+  owns topics and questions and implements it (`EloquentQuestionBank`); bound
+  in `ContentServiceProvider`. `Quiz` depends on it to snapshot a new attempt.
 
 Both interfaces live in `Shared`, not in the module that happens to consume
 them, because a future module (`Quiz`, `Scoring`) will need the same facts

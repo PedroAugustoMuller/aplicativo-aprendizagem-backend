@@ -10,6 +10,7 @@ use App\Modules\Content\Application\Query\ListTopics\TopicListReader;
 use App\Modules\Content\Domain\Repository\QuestionRepository;
 use App\Modules\Content\Domain\Repository\SubjectRepository;
 use App\Modules\Content\Domain\Repository\TopicRepository;
+use App\Modules\Content\Infrastructure\Contract\EloquentQuestionBank;
 use App\Modules\Content\Infrastructure\Contract\EloquentSubjectCatalog;
 use App\Modules\Content\Infrastructure\Persistence\EloquentQuestionBankReader;
 use App\Modules\Content\Infrastructure\Persistence\EloquentQuestionRepository;
@@ -17,6 +18,7 @@ use App\Modules\Content\Infrastructure\Persistence\EloquentSubjectListReader;
 use App\Modules\Content\Infrastructure\Persistence\EloquentSubjectRepository;
 use App\Modules\Content\Infrastructure\Persistence\EloquentTopicListReader;
 use App\Modules\Content\Infrastructure\Persistence\EloquentTopicRepository;
+use App\Shared\Domain\Contract\QuestionBank;
 use App\Shared\Domain\Contract\SubjectCatalog;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -32,6 +34,7 @@ final class ContentServiceProvider extends ServiceProvider
         $this->app->bind(SubjectRepository::class, EloquentSubjectRepository::class);
         $this->app->bind(SubjectListReader::class, EloquentSubjectListReader::class);
         $this->app->bind(SubjectCatalog::class, EloquentSubjectCatalog::class);
+        $this->app->bind(QuestionBank::class, EloquentQuestionBank::class);
     }
 
     public function boot(): void
