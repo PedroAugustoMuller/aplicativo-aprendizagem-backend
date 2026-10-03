@@ -63,6 +63,10 @@ final class AuthorizationMatrixTest extends TestCase
         yield 'reactivate student' => ['POST', '/students/{student}/reactivate', self::row(401, 403, 403, 200, 200)];
         yield 'credential slips' => ['GET', '/classrooms/{classroom}/credentials', self::row(401, 403, 403, 200, 200)];
         yield 'search students' => ['GET', '/students?search=Al', self::row(401, 403, 200, 200, 200)];
+        // The student's start answers 200: the world already holds their open attempt on that topic.
+        yield 'start quiz' => ['POST', '/topics/{topic}/quiz-attempts', self::row(401, 200, 403, 403, 403)];
+        yield 'read quiz' => ['GET', '/quiz-attempts/{attempt}', self::row(401, 200, 403, 403, 403)];
+        yield 'answer quiz' => ['POST', '/quiz-attempts/{attempt}/answers', self::row(401, 200, 403, 403, 403)];
     }
 
     /** @return array<string, int> */
@@ -77,8 +81,8 @@ final class AuthorizationMatrixTest extends TestCase
     {
         $world = $this->buildWorld();
         $uri = '/api/v1'.str_replace(
-            ['{classroom}', '{student}', '{teacher}', '{subject}', '{topic}', '{question}'],
-            [$world['classroomId'], $world['studentId'], $world['teacherId'], $world['subjectId'], $world['topicId'], $world['questionId']],
+            ['{classroom}', '{student}', '{teacher}', '{subject}', '{topic}', '{question}', '{attempt}'],
+            [$world['classroomId'], $world['studentId'], $world['teacherId'], $world['subjectId'], $world['topicId'], $world['questionId'], $world['attemptId']],
             $uriTemplate,
         );
         $body = $this->bodyFor($uriTemplate, $world);
@@ -126,6 +130,9 @@ final class AuthorizationMatrixTest extends TestCase
      *     topicId: string,
      *     questionId: string,
      *     classroomId: string,
+     *     attemptId: string,
+     *     attemptQuestionId: string,
+     *     optionId: string,
      *     teacherId: string,
      *     studentId: string,
      *     tokens: array<string, string|null>,
@@ -143,12 +150,18 @@ final class AuthorizationMatrixTest extends TestCase
 
         $classroomId = $this->makeClassroom($subjectId, teachers: [$teacher], students: [$student], name: 'Química 1');
         $this->makeClassroom($otherSubjectId, teachers: [$otherTeacher], name: 'Biologia 1');
+        $topicId = $this->makeTopic($subjectId);
+        $quizQuestion = $this->makeQuestionWithOptions($topicId, [['Na', true], ['S', false]]);
+        $attempt = $this->makeAttempt(EloquentAttribute::string($student->getKey(), 'users.id'), $topicId, $subjectId, $quizQuestion);
 
         return [
             'subjectId' => $subjectId,
-            'topicId' => $topicId = $this->makeTopic($subjectId),
+            'topicId' => $topicId,
             'questionId' => $this->makeQuestion($topicId),
             'classroomId' => $classroomId,
+            'attemptId' => $attempt['attemptId'],
+            'attemptQuestionId' => $attempt['attemptQuestionId'],
+            'optionId' => $quizQuestion['options'][0],
             'teacherId' => EloquentAttribute::string($teacher->getKey(), 'users.id'),
             'studentId' => EloquentAttribute::string($student->getKey(), 'users.id'),
             'tokens' => [
@@ -162,7 +175,7 @@ final class AuthorizationMatrixTest extends TestCase
     }
 
     /**
-     * @param  array{subjectId: string, topicId: string, questionId: string, classroomId: string, teacherId: string, studentId: string, tokens: array<string, string|null>}  $world
+     * @param  array{subjectId: string, topicId: string, questionId: string, classroomId: string, attemptId: string, attemptQuestionId: string, optionId: string, teacherId: string, studentId: string, tokens: array<string, string|null>}  $world
      * @return array<string, mixed>
      */
     private function bodyFor(string $uriTemplate, array $world): array
@@ -180,6 +193,11 @@ final class AuthorizationMatrixTest extends TestCase
             '/subjects/{subject}/topics/order' => ['ids' => [$world['topicId']]],
             '/topics/{topic}/questions' => ['id' => (string) Str::uuid(), 'type' => 'true_false', 'statement' => 'Pergunta '.uniqid(), 'correct' => true],
             '/questions/{question}' => ['version' => 1, 'statement' => 'Editada', 'correct' => false],
+            '/topics/{topic}/quiz-attempts' => ['id' => (string) Str::uuid()],
+            '/quiz-attempts/{attempt}/answers' => [
+                'answer_id' => (string) Str::uuid(), 'question_id' => $world['attemptQuestionId'],
+                'option_id' => $world['optionId'], 'answered_at' => now()->toIso8601String(),
+            ],
             default => [],
         };
     }

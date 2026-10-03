@@ -10,6 +10,7 @@ use App\Modules\Quiz\Domain\Service\Shuffler;
 use App\Modules\Quiz\Infrastructure\Persistence\DatabaseTransactionManager;
 use App\Modules\Quiz\Infrastructure\Persistence\EloquentAttemptRepository;
 use App\Modules\Quiz\Infrastructure\Random\RandomShuffler;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 final class QuizServiceProvider extends ServiceProvider
@@ -24,5 +25,9 @@ final class QuizServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadMigrationsFrom(__DIR__.'/Database/Migrations');
+
+        Route::prefix('api/v1')
+            ->middleware('api')
+            ->group(__DIR__.'/Infrastructure/Http/routes.php');
     }
 }

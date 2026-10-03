@@ -113,4 +113,28 @@ trait ActsAsUsers
 
         return ['id' => $id, 'options' => $optionIds];
     }
+
+    /**
+     * An open attempt holding one snapshot of $question (its first option is the snapshot's correct one).
+     *
+     * @param  array{id: string, options: list<string>}  $question
+     * @return array{attemptId: string, attemptQuestionId: string}
+     */
+    protected function makeAttempt(string $studentId, string $topicId, string $subjectId, array $question): array
+    {
+        $attemptId = (string) Str::uuid7();
+        $attemptQuestionId = (string) Str::uuid7();
+        DB::table('quiz_attempts')->insert([
+            'id' => $attemptId, 'student_id' => $studentId, 'topic_id' => $topicId, 'subject_id' => $subjectId,
+            'started_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('quiz_attempt_questions')->insert([
+            'id' => $attemptQuestionId, 'attempt_id' => $attemptId, 'position' => 0, 'question_id' => $question['id'],
+            'type' => 'multiple_choice', 'statement' => 'Pergunta?', 'explanation' => null,
+            'options' => json_encode(array_map(static fn (string $id): array => ['id' => $id, 'text' => $id], $question['options']), JSON_THROW_ON_ERROR),
+            'correct_option_id' => $question['options'][0], 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        return ['attemptId' => $attemptId, 'attemptQuestionId' => $attemptQuestionId];
+    }
 }
