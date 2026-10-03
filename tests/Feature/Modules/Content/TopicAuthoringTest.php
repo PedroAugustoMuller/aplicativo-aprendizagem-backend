@@ -157,6 +157,40 @@ final class TopicAuthoringTest extends TestCase
         $this->asTeacher()->postJson('/api/v1/topics/'.$id.'/reactivate')->assertOk()->assertJsonPath('data.active', true);
     }
 
+    public function test_the_order_is_rewritten_and_the_list_comes_back_in_it(): void
+    {
+        $a = $this->makeTopic($this->subjectId, 'A', 0);
+        $b = $this->makeTopic($this->subjectId, 'B', 1);
+
+        $this->asTeacher()->putJson($this->topicsUrl().'/order', ['ids' => [$b, $a]])
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $b)
+            ->assertJsonPath('data.0.position', 0)
+            ->assertJsonPath('data.1.id', $a)
+            ->assertJsonPath('data.1.position', 1);
+    }
+
+    public function test_an_order_that_does_not_match_the_current_topics_is_stale(): void
+    {
+        $a = $this->makeTopic($this->subjectId, 'A', 0);
+        $this->makeTopic($this->subjectId, 'B', 1);
+
+        $this->asTeacher()->putJson($this->topicsUrl().'/order', ['ids' => [$a]])
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'content.topic.order_stale');
+    }
+
+    public function test_an_order_with_a_malformed_id_is_a_validation_error(): void
+    {
+        $response = $this->asTeacher()->putJson($this->topicsUrl().'/order', ['ids' => ['nope']])->assertStatus(422);
+
+        // The field key is literally "ids.0", which a dotted JSON path cannot reach.
+        $errors = (array) $response->json('errors');
+        $first = $errors['ids.0'] ?? null;
+        self::assertIsArray($first);
+        self::assertSame('validation.uuid', data_get($first, '0.code'));
+    }
+
     private function asTeacher(): self
     {
         return $this->withHeader('Authorization', 'Bearer '.$this->teacherToken);

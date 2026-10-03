@@ -34,6 +34,7 @@ final class AuthorizationMatrixTest extends TestCase
         yield 'update topic' => ['PATCH', '/topics/{topic}', self::row(401, 403, 403, 200, 200)];
         yield 'deactivate topic' => ['POST', '/topics/{topic}/deactivate', self::row(401, 403, 403, 200, 200)];
         yield 'reactivate topic' => ['POST', '/topics/{topic}/reactivate', self::row(401, 403, 403, 200, 200)];
+        yield 'reorder topics' => ['PUT', '/subjects/{subject}/topics/order', self::row(401, 403, 403, 200, 200)];
         yield 'create subject' => ['POST', '/subjects', self::row(401, 403, 403, 403, 201)];
         yield 'rename subject' => ['PATCH', '/subjects/{subject}', self::row(401, 403, 403, 403, 200)];
         yield 'deactivate subject' => ['POST', '/subjects/{subject}/deactivate', self::row(401, 403, 403, 403, 200)];
@@ -169,6 +170,7 @@ final class AuthorizationMatrixTest extends TestCase
             '/classrooms/{classroom}/students' => ['students' => [['id' => (string) Str::uuid(), 'name' => 'Nova Aluna']]],
             '/subjects/{subject}/topics' => ['id' => (string) Str::uuid(), 'name' => 'Conteúdo '.uniqid(), 'description' => ''],
             '/topics/{topic}' => ['name' => 'Conteúdo '.uniqid()],
+            '/subjects/{subject}/topics/order' => ['ids' => [$world['topicId']]],
             default => [],
         };
     }

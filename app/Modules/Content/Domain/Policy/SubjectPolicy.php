@@ -24,17 +24,28 @@ final readonly class SubjectPolicy
         return in_array($subjectId, $this->assignments->subjectIdsEnrolledBy($actor->userId), true);
     }
 
-    /** Topic and question authoring (RF02). Teachers share the bank of every subject they teach. */
-    public function canAuthor(Actor $actor, string $subjectId): bool
+    /**
+     * Topic and question authoring (RF02). Teachers share the bank of every subject they teach.
+     *
+     * @return list<string>|null null means every subject (admin)
+     */
+    public function authoredSubjectIds(Actor $actor): ?array
     {
         if ($actor->isAdmin()) {
-            return true;
+            return null;
         }
 
         if ($actor->isStudent()) {
-            return false;
+            return [];
         }
 
-        return in_array($subjectId, $this->assignments->subjectIdsTaughtBy($actor->userId), true);
+        return $this->assignments->subjectIdsTaughtBy($actor->userId);
+    }
+
+    public function canAuthor(Actor $actor, string $subjectId): bool
+    {
+        $ids = $this->authoredSubjectIds($actor);
+
+        return $ids === null || in_array($subjectId, $ids, true);
     }
 }

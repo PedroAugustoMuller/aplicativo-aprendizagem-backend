@@ -31,7 +31,7 @@ final class SubjectController
         $items = $handler->handle(new ListSubjectsQuery($this->actors->fromRequest($request)));
 
         return new JsonResponse(['data' => array_map(
-            fn (SubjectListItem $s): array => ['id' => $s->id, 'name' => $s->name, 'active' => $s->active],
+            fn (SubjectListItem $s): array => ['id' => $s->id, 'name' => $s->name, 'active' => $s->active, 'can_author' => $s->canAuthor],
             $items,
         )]);
     }

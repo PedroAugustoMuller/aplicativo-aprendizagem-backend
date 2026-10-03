@@ -23,5 +23,6 @@ Route::middleware(['auth:sanctum', 'account.active', 'password.changed'])->group
         Route::patch('/topics/{id}', [TopicController::class, 'update'])->whereUuid('id');
         Route::post('/topics/{id}/deactivate', [TopicController::class, 'deactivate'])->whereUuid('id');
         Route::post('/topics/{id}/reactivate', [TopicController::class, 'reactivate'])->whereUuid('id');
+        Route::put('/subjects/{id}/topics/order', [TopicController::class, 'reorder'])->whereUuid('id');
     });
 });

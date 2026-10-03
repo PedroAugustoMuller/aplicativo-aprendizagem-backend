@@ -13,5 +13,11 @@ final readonly class SubjectListItem
         public string $id,
         public string $name,
         public bool $active,
+        public bool $canAuthor = false,
     ) {}
+
+    public function withCanAuthor(bool $canAuthor): self
+    {
+        return new self($this->id, $this->name, $this->active, $canAuthor);
+    }
 }

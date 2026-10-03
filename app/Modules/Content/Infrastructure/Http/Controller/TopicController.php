@@ -6,6 +6,8 @@ namespace App\Modules\Content\Infrastructure\Http\Controller;
 
 use App\Modules\Content\Application\Command\CreateTopic\CreateTopicCommand;
 use App\Modules\Content\Application\Command\CreateTopic\CreateTopicHandler;
+use App\Modules\Content\Application\Command\ReorderTopics\ReorderTopicsCommand;
+use App\Modules\Content\Application\Command\ReorderTopics\ReorderTopicsHandler;
 use App\Modules\Content\Application\Command\SetTopicActivation\SetTopicActivationCommand;
 use App\Modules\Content\Application\Command\SetTopicActivation\SetTopicActivationHandler;
 use App\Modules\Content\Application\Command\UpdateTopic\UpdateTopicCommand;
@@ -17,6 +19,7 @@ use App\Modules\Content\Application\Query\ListTopics\TopicListItem;
 use App\Modules\Content\Domain\Repository\TopicRepository;
 use App\Modules\Content\Domain\ValueObject\TopicId;
 use App\Modules\Content\Infrastructure\Http\Request\CreateTopicRequest;
+use App\Modules\Content\Infrastructure\Http\Request\ReorderTopicsRequest;
 use App\Modules\Content\Infrastructure\Http\Request\UpdateTopicRequest;
 use App\Shared\Infrastructure\Http\ActorFactory;
 use Illuminate\Http\JsonResponse;
@@ -78,6 +81,13 @@ final class TopicController
     public function reactivate(Request $request, string $id, SetTopicActivationHandler $handler): JsonResponse
     {
         return $this->setActive($request, $id, true, $handler);
+    }
+
+    public function reorder(ReorderTopicsRequest $request, string $id, ReorderTopicsHandler $handler, ListTopicsHandler $list): JsonResponse
+    {
+        $handler->handle(new ReorderTopicsCommand($this->actors->fromRequest($request), $id, $request->ids()));
+
+        return $this->index($request, $id, $list);
     }
 
     private function setActive(Request $request, string $id, bool $active, SetTopicActivationHandler $handler): JsonResponse

@@ -36,6 +36,27 @@ final class SubjectPolicyTest extends TestCase
         self::assertFalse($policy->canAuthor(new Actor('s', Role::Student), self::CHEM));
     }
 
+    public function test_authored_subject_ids_are_all_for_an_admin_taught_ones_for_a_teacher_none_for_a_student(): void
+    {
+        $assignments = new class implements TeachingAssignments
+        {
+            public function subjectIdsTaughtBy(string $userId): array
+            {
+                return ['s-1'];
+            }
+
+            public function subjectIdsEnrolledBy(string $userId): array
+            {
+                return ['s-2'];
+            }
+        };
+        $policy = new SubjectPolicy($assignments);
+
+        self::assertNull($policy->authoredSubjectIds(new Actor('a', Role::Admin)));
+        self::assertSame(['s-1'], $policy->authoredSubjectIds(new Actor('t', Role::Teacher)));
+        self::assertSame([], $policy->authoredSubjectIds(new Actor('s', Role::Student)));
+    }
+
     /**
      * @param  array<string, list<string>>  $taught
      * @param  array<string, list<string>>  $enrolled

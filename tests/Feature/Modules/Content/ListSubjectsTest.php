@@ -60,4 +60,32 @@ final class ListSubjectsTest extends TestCase
             ->assertOk()
             ->assertJsonCount(0, 'data');
     }
+
+    public function test_can_author_is_true_for_the_admin_and_for_the_subjects_a_teacher_teaches(): void
+    {
+        $chemistry = $this->makeSubject('Química');
+        $biology = $this->makeSubject('Biologia');
+        $teacher = $this->makeUser('teacher');
+        $student = $this->makeUser('student');
+        $this->makeClassroom($chemistry, teachers: [$teacher], students: [$student]);
+
+        $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($this->makeUser('admin')))
+            ->getJson('/api/v1/subjects')
+            ->assertJsonPath('data.0.can_author', true)
+            ->assertJsonPath('data.1.can_author', true);
+        $this->app['auth']->forgetGuards();
+
+        // Ordered by name: Biologia, then Química.
+        $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($teacher))
+            ->getJson('/api/v1/subjects')
+            ->assertJsonPath('data.0.id', $biology)
+            ->assertJsonPath('data.0.can_author', false)
+            ->assertJsonPath('data.1.id', $chemistry)
+            ->assertJsonPath('data.1.can_author', true);
+        $this->app['auth']->forgetGuards();
+
+        $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($student))
+            ->getJson('/api/v1/subjects')
+            ->assertJsonPath('data.0.can_author', false);
+    }
 }
