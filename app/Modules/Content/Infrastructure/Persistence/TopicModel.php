@@ -10,9 +10,11 @@ use Illuminate\Database\Eloquent\Model;
  * Persistence detail. Holds no business rules — those live in the domain entity.
  *
  * @property string $id
+ * @property string $subject_id
  * @property string $name
  * @property string $description
  * @property int $position
+ * @property \DateTimeImmutable|null $deactivated_at
  */
 final class TopicModel extends Model
 {
@@ -29,6 +31,6 @@ final class TopicModel extends Model
      */
     protected function casts(): array
     {
-        return ['position' => 'integer'];
+        return ['position' => 'integer', 'deactivated_at' => 'immutable_datetime'];
     }
 }

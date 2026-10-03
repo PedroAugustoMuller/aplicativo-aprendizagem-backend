@@ -11,6 +11,7 @@ use App\Modules\Content\Domain\ValueObject\TopicId;
 use App\Modules\Content\Domain\ValueObject\TopicName;
 use App\Modules\Content\Infrastructure\Persistence\SubjectModel;
 use App\Modules\Content\Infrastructure\Persistence\TopicModel;
+use DateTimeImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -55,16 +56,99 @@ final class EloquentTopicRepositoryTest extends TestCase
         self::assertSame(2, $row->getAttribute('position'));
     }
 
+    public function test_find_by_id_restores_the_stored_topic(): void
+    {
+        $subjectId = $this->createSubject();
+        $id = TopicId::random();
+        $this->repository()->save(new Topic($id, $subjectId, new TopicName('Átomos'), 'Prótons.', 2));
+
+        $topic = $this->repository()->findById($id);
+
+        self::assertNotNull($topic);
+        self::assertFalse($topic->isNew());
+        self::assertSame('Átomos', $topic->name()->value());
+        self::assertSame(2, $topic->position());
+        self::assertTrue($topic->isActive());
+        self::assertNull($this->repository()->findById(TopicId::random()));
+    }
+
+    public function test_a_rename_and_a_concurrent_deactivation_both_survive(): void
+    {
+        $subjectId = $this->createSubject();
+        $id = TopicId::random();
+        $this->repository()->save(new Topic($id, $subjectId, new TopicName('Átomos'), '', 0));
+
+        // Two requests loaded the same topic before either saved.
+        $renaming = $this->repository()->findById($id);
+        $deactivating = $this->repository()->findById($id);
+        self::assertNotNull($renaming);
+        self::assertNotNull($deactivating);
+
+        $renaming->rename(new TopicName('Átomos e Íons'));
+        $deactivating->deactivate(new DateTimeImmutable);
+        $this->repository()->save($renaming);
+        $this->repository()->save($deactivating);
+
+        $stored = $this->repository()->findById($id);
+        self::assertNotNull($stored);
+        self::assertSame('Átomos e Íons', $stored->name()->value());
+        self::assertFalse($stored->isActive());
+    }
+
+    public function test_append_places_a_topic_after_the_last_one(): void
+    {
+        $subjectId = $this->createSubject();
+        $repository = $this->repository();
+
+        $first = $repository->append(TopicId::random(), $subjectId, new TopicName('Primeiro'), '');
+        $repository->save(new Topic(TopicId::random(), $subjectId, new TopicName('Sétimo'), '', 7));
+        $next = $repository->append(TopicId::random(), $subjectId, new TopicName('Oitavo'), 'Depois.');
+
+        self::assertSame(0, $first->position());
+        self::assertSame(8, $next->position());
+        self::assertSame(3, TopicModel::query()->where('subject_id', $subjectId->value())->count());
+    }
+
+    public function test_a_name_is_taken_case_insensitively_within_the_same_subject_only(): void
+    {
+        $chemistry = $this->createSubject();
+        $biology = $this->createSubject('Biologia');
+        $id = TopicId::random();
+        $this->repository()->save(new Topic($id, $chemistry, new TopicName('Átomos'), '', 0));
+
+        self::assertTrue($this->repository()->nameTakenByAnother($chemistry, new TopicName('átomos'), TopicId::random()));
+        self::assertFalse($this->repository()->nameTakenByAnother($chemistry, new TopicName('Átomos'), $id));
+        self::assertFalse($this->repository()->nameTakenByAnother($biology, new TopicName('Átomos'), TopicId::random()));
+    }
+
+    public function test_reorder_rewrites_positions_only_for_the_exact_set_of_topics(): void
+    {
+        $subjectId = $this->createSubject();
+        $a = TopicId::random();
+        $b = TopicId::random();
+        $this->repository()->save(new Topic($a, $subjectId, new TopicName('A'), '', 1));
+        $this->repository()->save(new Topic($b, $subjectId, new TopicName('B'), '', 2));
+
+        self::assertFalse($this->repository()->reorder($subjectId, [$b]));
+        self::assertFalse($this->repository()->reorder($subjectId, [$b, $a, TopicId::random()]));
+        self::assertFalse($this->repository()->reorder($subjectId, [$b, $b]));
+        self::assertSame(1, $this->repository()->findById($a)?->position());
+
+        self::assertTrue($this->repository()->reorder($subjectId, [$b, $a]));
+        self::assertSame(0, $this->repository()->findById($b)?->position());
+        self::assertSame(1, $this->repository()->findById($a)?->position());
+    }
+
     private function repository(): TopicRepository
     {
         return $this->app->make(TopicRepository::class);
     }
 
-    private function createSubject(): SubjectId
+    private function createSubject(string $name = 'Química'): SubjectId
     {
         $id = SubjectId::random();
 
-        SubjectModel::query()->create(['id' => $id->value(), 'name' => 'Química']);
+        SubjectModel::query()->create(['id' => $id->value(), 'name' => $name]);
 
         return $id;
     }
