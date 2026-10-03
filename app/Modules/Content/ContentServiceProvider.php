@@ -6,9 +6,11 @@ namespace App\Modules\Content;
 
 use App\Modules\Content\Application\Query\ListSubjects\SubjectListReader;
 use App\Modules\Content\Application\Query\ListTopics\TopicListReader;
+use App\Modules\Content\Domain\Repository\QuestionRepository;
 use App\Modules\Content\Domain\Repository\SubjectRepository;
 use App\Modules\Content\Domain\Repository\TopicRepository;
 use App\Modules\Content\Infrastructure\Contract\EloquentSubjectCatalog;
+use App\Modules\Content\Infrastructure\Persistence\EloquentQuestionRepository;
 use App\Modules\Content\Infrastructure\Persistence\EloquentSubjectListReader;
 use App\Modules\Content\Infrastructure\Persistence\EloquentSubjectRepository;
 use App\Modules\Content\Infrastructure\Persistence\EloquentTopicListReader;
@@ -23,6 +25,7 @@ final class ContentServiceProvider extends ServiceProvider
     {
         $this->app->bind(TopicRepository::class, EloquentTopicRepository::class);
         $this->app->bind(TopicListReader::class, EloquentTopicListReader::class);
+        $this->app->bind(QuestionRepository::class, EloquentQuestionRepository::class);
         $this->app->bind(SubjectRepository::class, EloquentSubjectRepository::class);
         $this->app->bind(SubjectListReader::class, EloquentSubjectListReader::class);
         $this->app->bind(SubjectCatalog::class, EloquentSubjectCatalog::class);
