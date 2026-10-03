@@ -7,6 +7,7 @@ namespace App\Modules\Content\Infrastructure\Persistence;
 use App\Modules\Content\Application\Query\ListTopics\TopicListItem;
 use App\Modules\Content\Application\Query\ListTopics\TopicListReader;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Reads straight into DTOs. Selecting only the displayed columns is the point:
@@ -15,24 +16,38 @@ use App\Shared\Infrastructure\Persistence\EloquentAttribute;
 final class EloquentTopicListReader implements TopicListReader
 {
     /** @return list<TopicListItem> */
-    public function forSubject(string $subjectId): array
+    public function forSubject(string $subjectId, bool $includeInactive): array
     {
+        $query = TopicModel::query()
+            ->select(['topics.id', 'topics.name', 'topics.description', 'topics.position', 'topics.deactivated_at'])
+            ->selectSub(
+                DB::table('questions')
+                    ->selectRaw('count(*)')
+                    ->whereColumn('questions.topic_id', 'topics.id')
+                    ->whereNull('questions.deactivated_at'),
+                'active_question_count',
+            )
+            ->where('topics.subject_id', $subjectId)
+            ->orderBy('topics.position')
+            ->orderBy('topics.name');
+
+        if (! $includeInactive) {
+            $query->whereNull('topics.deactivated_at');
+        }
+
         $items = [];
 
-        foreach (TopicModel::query()
-            ->select(['id', 'name', 'description', 'position'])
-            ->where('subject_id', $subjectId)
-            ->orderBy('position')
-            ->get() as $model) {
+        foreach ($query->get() as $model) {
+            $count = $model->getAttribute('active_question_count');
+
             $items[] = new TopicListItem(
                 id: EloquentAttribute::string($model->getKey(), 'topics.id'),
                 name: EloquentAttribute::string($model->getAttribute('name'), 'topics.name'),
                 description: EloquentAttribute::string($model->getAttribute('description'), 'topics.description'),
-                // position skips EloquentAttribute: TopicModel casts it to integer and
-                // declares it in its @property docblock, so Larastan already verifies
-                // this access as int without help. id/name/description have no such
-                // cast, so getAttribute() there stays mixed and needs the helper.
+                // position is cast to int by TopicModel; see its @property docblock.
                 position: $model->position,
+                active: $model->getAttribute('deactivated_at') === null,
+                activeQuestionCount: is_numeric($count) ? (int) $count : 0,
             );
         }
 

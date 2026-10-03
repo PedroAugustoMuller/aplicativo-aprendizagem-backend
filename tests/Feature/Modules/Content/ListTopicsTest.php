@@ -10,6 +10,7 @@ use App\Modules\Content\Infrastructure\Persistence\SubjectModel;
 use App\Modules\Content\Infrastructure\Persistence\TopicModel;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Feature\Support\ActsAsUsers;
 use Tests\TestCase;
@@ -37,7 +38,7 @@ final class ListTopicsTest extends TestCase
 
         $response->assertOk()
             ->assertJsonCount(6, 'data')
-            ->assertJsonStructure(['data' => [['id', 'name', 'description', 'position']]])
+            ->assertJsonStructure(['data' => [['id', 'name', 'description', 'position', 'active', 'active_question_count']]])
             ->assertJsonPath('data.0.name', 'Matéria e suas Transformações')
             ->assertJsonPath('data.0.position', 1);
 
@@ -46,6 +47,54 @@ final class ListTopicsTest extends TestCase
         sort($sorted);
 
         self::assertSame($sorted, $positions, 'Topics must arrive ordered by position.');
+    }
+
+    public function test_a_student_does_not_receive_deactivated_topics(): void
+    {
+        $student = $this->makeUser('student');
+        $this->makeClassroom($this->chemistrySubjectId(), students: [$student]);
+        TopicModel::query()->where('name', 'Tabela Periódica')->update(['deactivated_at' => now()]);
+
+        $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($student))
+            ->getJson('/api/v1/subjects/'.$this->chemistrySubjectId().'/topics')
+            ->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonMissingPath('data.0.active_question_count')
+            ->assertJsonPath('data.0.active', true);
+    }
+
+    public function test_an_author_receives_every_topic_with_its_active_question_count(): void
+    {
+        $teacher = $this->makeUser('teacher');
+        $this->makeClassroom($this->chemistrySubjectId(), teachers: [$teacher]);
+        $topic = TopicModel::query()->where('name', 'Matéria e suas Transformações')->firstOrFail();
+        $topicId = EloquentAttribute::string($topic->getKey(), 'topics.id');
+        $this->makeQuestion($topicId);
+        $hidden = $this->makeQuestion($topicId);
+        DB::table('questions')->where('id', $hidden)->update(['deactivated_at' => now()]);
+        TopicModel::query()->where('name', 'Tabela Periódica')->update(['deactivated_at' => now()]);
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($teacher))
+            ->getJson('/api/v1/subjects/'.$this->chemistrySubjectId().'/topics')
+            ->assertOk()
+            ->assertJsonCount(6, 'data')
+            ->assertJsonPath('data.0.id', $topicId)
+            ->assertJsonPath('data.0.active_question_count', 1)
+            ->assertJsonPath('data.1.active_question_count', 0);
+
+        $rows = collect((array) $response->json('data'))->keyBy('name');
+        self::assertFalse(data_get($rows, 'Tabela Periódica.active'));
+    }
+
+    public function test_a_teacher_of_another_subject_sees_active_topics_without_counts(): void
+    {
+        $other = $this->makeUser('teacher');
+        $this->makeClassroom($this->makeSubject('Astronomia'), teachers: [$other], name: 'Astronomia 1');
+
+        $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($other))
+            ->getJson('/api/v1/subjects/'.$this->chemistrySubjectId().'/topics')
+            ->assertOk()
+            ->assertJsonMissingPath('data.0.active_question_count');
     }
 
     public function test_the_endpoint_orders_by_position_even_when_insertion_order_disagrees(): void

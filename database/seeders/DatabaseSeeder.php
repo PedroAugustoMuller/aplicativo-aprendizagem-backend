@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Modules\Content\Database\Seeders\ChemistryQuestionsSeeder;
 use App\Modules\Content\Database\Seeders\ChemistryTopicsSeeder;
 use App\Modules\Content\Database\Seeders\SubjectsSeeder;
 use App\Modules\Identity\Database\Seeders\DevelopmentAccountsSeeder;
@@ -22,6 +23,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             SubjectsSeeder::class,
             ChemistryTopicsSeeder::class,
+            ChemistryQuestionsSeeder::class,
             DevelopmentAccountsSeeder::class,
         ]);
     }

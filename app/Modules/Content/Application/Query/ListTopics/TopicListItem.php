@@ -14,5 +14,7 @@ final readonly class TopicListItem
         public string $name,
         public string $description,
         public int $position,
+        public bool $active = true,
+        public int $activeQuestionCount = 0,
     ) {}
 }

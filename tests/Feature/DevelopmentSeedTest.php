@@ -45,6 +45,8 @@ final class DevelopmentSeedTest extends TestCase
         self::assertSame(4, DB::table('users')->count());
         self::assertSame(2, DB::table('subjects')->count());
         self::assertSame(6, DB::table('topics')->count());
+        self::assertSame(5, DB::table('questions')->count());
+        self::assertSame(15, DB::table('question_options')->count());
         self::assertSame(1, DB::table('classrooms')->count());
         self::assertSame(1, DB::table('pending_credentials')->count());
     }

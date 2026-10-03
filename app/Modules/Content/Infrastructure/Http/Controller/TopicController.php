@@ -31,17 +31,23 @@ final class TopicController
 
     public function index(Request $request, string $id, ListTopicsHandler $handler): JsonResponse
     {
-        $items = $handler->handle(new ListTopicsQuery($this->actors->fromRequest($request), $id));
+        $list = $handler->handle(new ListTopicsQuery($this->actors->fromRequest($request), $id));
 
         return new JsonResponse([
             'data' => array_map(
-                fn (TopicListItem $item): array => [
-                    'id' => $item->id,
-                    'name' => $item->name,
-                    'description' => $item->description,
-                    'position' => $item->position,
-                ],
-                $items,
+                function (TopicListItem $item) use ($list): array {
+                    $row = [
+                        'id' => $item->id,
+                        'name' => $item->name,
+                        'description' => $item->description,
+                        'position' => $item->position,
+                        'active' => $item->active,
+                    ];
+
+                    // Counts are an authoring aid; non-authors never see them.
+                    return $list->canAuthor ? $row + ['active_question_count' => $item->activeQuestionCount] : $row;
+                },
+                $list->items,
             ),
         ]);
     }

@@ -49,7 +49,8 @@ final class ListTopicsHandlerTest extends TestCase
 
         $items = $handler->handle(new ListTopicsQuery(new Actor('s', Role::Student), self::CHEM));
 
-        self::assertSame([$item], $items);
+        self::assertSame([$item], $items->items);
+        self::assertFalse($items->canAuthor);
     }
 
     public function test_staff_is_allowed_without_consulting_enrolment(): void
@@ -76,7 +77,24 @@ final class ListTopicsHandlerTest extends TestCase
 
         $items = $handler->handle(new ListTopicsQuery(new Actor('a', Role::Admin), self::CHEM));
 
-        self::assertSame([$item], $items);
+        self::assertSame([$item], $items->items);
+        self::assertTrue($items->canAuthor);
+    }
+
+    public function test_a_student_is_never_given_deactivated_topics(): void
+    {
+        $reader = new class implements TopicListReader
+        {
+            public function forSubject(string $subjectId, bool $includeInactive): array
+            {
+                TestCase::assertFalse($includeInactive);
+
+                return [];
+            }
+        };
+
+        $this->handler(subjectExists: true, reader: $reader, enrolled: [self::CHEM])
+            ->handle(new ListTopicsQuery(new Actor('s', Role::Student), self::CHEM));
     }
 
     /** @param list<string>|null $enrolled */
@@ -129,7 +147,7 @@ final class ListTopicsHandlerTest extends TestCase
             /** @param list<TopicListItem> $items */
             public function __construct(private readonly array $items, private readonly ?string $expectedSubjectId) {}
 
-            public function forSubject(string $subjectId): array
+            public function forSubject(string $subjectId, bool $includeInactive): array
             {
                 if ($this->expectedSubjectId !== null) {
                     TestCase::assertSame($this->expectedSubjectId, $subjectId);

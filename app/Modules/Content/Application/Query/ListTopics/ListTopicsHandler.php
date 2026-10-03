@@ -18,8 +18,7 @@ final readonly class ListTopicsHandler
         private SubjectPolicy $policy,
     ) {}
 
-    /** @return list<TopicListItem> */
-    public function handle(ListTopicsQuery $query): array
+    public function handle(ListTopicsQuery $query): TopicList
     {
         if ($this->subjects->findById(new SubjectId($query->subjectId)) === null) {
             throw new SubjectNotFoundException;
@@ -29,6 +28,9 @@ final readonly class ListTopicsHandler
             throw new ContentAccessDeniedException;
         }
 
-        return $this->reader->forSubject($query->subjectId);
+        // Authors manage deactivated topics too; everyone else only ever sees active ones.
+        $canAuthor = $this->policy->canAuthor($query->actor, $query->subjectId);
+
+        return new TopicList($canAuthor, $this->reader->forSubject($query->subjectId, includeInactive: $canAuthor));
     }
 }

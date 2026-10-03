@@ -299,11 +299,21 @@ after that policy runs, not just the route-level gate —
 
 | Method | Path | Who |
 |---|---|---|
-| GET | `/subjects` | staff: all · student: their enrolled subjects |
+| GET | `/subjects` | staff: all · student: their enrolled subjects; each with `can_author` |
 | POST | `/subjects` | admin |
 | PATCH | `/subjects/{id}` | admin |
 | POST | `/subjects/{id}/deactivate` | admin |
-| GET | `/subjects/{id}/topics` | staff: all · student: if enrolled in that subject |
+| GET | `/subjects/{id}/topics` | authors (admin, the subject's teachers): all, with `active` and `active_question_count` · others: active only (students if enrolled) |
+| POST | `/subjects/{id}/topics` | authors; client `id`, appended at the end |
+| PUT | `/subjects/{id}/topics/order` | authors; the full list of ids, else 409 `content.topic.order_stale` |
+| PATCH | `/topics/{id}` | authors; `name` and/or `description` |
+| POST | `/topics/{id}/deactivate` · `/reactivate` | authors |
+| GET | `/topics/{id}/questions` | authors; the bank with correct answers, active and deactivated |
+| POST | `/topics/{id}/questions` | authors; `multiple_choice` (2–5 options, one correct) or `true_false` (`correct`) |
+| PUT | `/questions/{id}` | authors; requires the `version` read, else 409 `content.question.edited_elsewhere` |
+| POST | `/questions/{id}/deactivate` · `/reactivate` | authors |
+
+Writes in a deactivated subject answer 409 `content.subject.inactive`.
 
 **Teachers** (Identity, admin only)
 
