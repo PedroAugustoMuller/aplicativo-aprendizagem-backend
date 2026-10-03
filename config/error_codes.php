@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Content\Domain\Error\ContentErrorCode;
 use App\Modules\Identity\Domain\Error\IdentityErrorCode;
+use App\Modules\Quiz\Domain\Error\QuizErrorCode;
 use App\Shared\Domain\Error\SystemErrorCode;
 
 return [
@@ -15,5 +16,6 @@ return [
         SystemErrorCode::class,
         IdentityErrorCode::class,
         ContentErrorCode::class,
+        QuizErrorCode::class,
     ],
 ];

@@ -42,6 +42,21 @@ parameters:
         - type: class
           value: App\\Modules\\Content\\ContentServiceProvider
 
+    - name: QuizDomain
+      collectors:
+        - type: directory
+          value: app/Modules/Quiz/Domain/.*
+    - name: QuizApplication
+      collectors:
+        - type: directory
+          value: app/Modules/Quiz/Application/.*
+    - name: QuizInfrastructure
+      collectors:
+        - type: directory
+          value: app/Modules/Quiz/(Infrastructure|Database)/.*
+        - type: class
+          value: App\\Modules\\Quiz\\QuizServiceProvider
+
     - name: Vendor
       collectors:
         - type: classNameRegex
@@ -75,6 +90,17 @@ parameters:
     ContentInfrastructure:
       - ContentDomain
       - ContentApplication
+      - SharedDomain
+      - SharedInfrastructure
+      - Vendor
+    QuizDomain:
+      - SharedDomain
+    QuizApplication:
+      - QuizDomain
+      - SharedDomain
+    QuizInfrastructure:
+      - QuizDomain
+      - QuizApplication
       - SharedDomain
       - SharedInfrastructure
       - Vendor
