@@ -15,4 +15,13 @@ Route::middleware(['auth:sanctum', 'account.active', 'password.changed'])->group
         Route::patch('/subjects/{id}', [SubjectController::class, 'update'])->whereUuid('id');
         Route::post('/subjects/{id}/deactivate', [SubjectController::class, 'deactivate'])->whereUuid('id');
     });
+
+    // Coarse gate only: whether this staff member authors this subject is the
+    // handler's AuthoringGate check (SubjectPolicy::canAuthor).
+    Route::middleware('role:staff')->group(function (): void {
+        Route::post('/subjects/{id}/topics', [TopicController::class, 'store'])->whereUuid('id');
+        Route::patch('/topics/{id}', [TopicController::class, 'update'])->whereUuid('id');
+        Route::post('/topics/{id}/deactivate', [TopicController::class, 'deactivate'])->whereUuid('id');
+        Route::post('/topics/{id}/reactivate', [TopicController::class, 'reactivate'])->whereUuid('id');
+    });
 });

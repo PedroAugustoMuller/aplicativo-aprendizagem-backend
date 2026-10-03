@@ -30,6 +30,10 @@ final class AuthorizationMatrixTest extends TestCase
     {
         //                                                                guest student other  teacher admin
         yield 'list subjects' => ['GET', '/subjects', self::row(401, 200, 200, 200, 200)];
+        yield 'create topic' => ['POST', '/subjects/{subject}/topics', self::row(401, 403, 403, 201, 201)];
+        yield 'update topic' => ['PATCH', '/topics/{topic}', self::row(401, 403, 403, 200, 200)];
+        yield 'deactivate topic' => ['POST', '/topics/{topic}/deactivate', self::row(401, 403, 403, 200, 200)];
+        yield 'reactivate topic' => ['POST', '/topics/{topic}/reactivate', self::row(401, 403, 403, 200, 200)];
         yield 'create subject' => ['POST', '/subjects', self::row(401, 403, 403, 403, 201)];
         yield 'rename subject' => ['PATCH', '/subjects/{subject}', self::row(401, 403, 403, 403, 200)];
         yield 'deactivate subject' => ['POST', '/subjects/{subject}/deactivate', self::row(401, 403, 403, 403, 200)];
@@ -67,8 +71,8 @@ final class AuthorizationMatrixTest extends TestCase
     {
         $world = $this->buildWorld();
         $uri = '/api/v1'.str_replace(
-            ['{classroom}', '{student}', '{teacher}', '{subject}'],
-            [$world['classroomId'], $world['studentId'], $world['teacherId'], $world['subjectId']],
+            ['{classroom}', '{student}', '{teacher}', '{subject}', '{topic}'],
+            [$world['classroomId'], $world['studentId'], $world['teacherId'], $world['subjectId'], $world['topicId']],
             $uriTemplate,
         );
         $body = $this->bodyFor($uriTemplate, $world);
@@ -113,6 +117,7 @@ final class AuthorizationMatrixTest extends TestCase
     /**
      * @return array{
      *     subjectId: string,
+     *     topicId: string,
      *     classroomId: string,
      *     teacherId: string,
      *     studentId: string,
@@ -134,6 +139,7 @@ final class AuthorizationMatrixTest extends TestCase
 
         return [
             'subjectId' => $subjectId,
+            'topicId' => $this->makeTopic($subjectId),
             'classroomId' => $classroomId,
             'teacherId' => EloquentAttribute::string($teacher->getKey(), 'users.id'),
             'studentId' => EloquentAttribute::string($student->getKey(), 'users.id'),
@@ -148,7 +154,7 @@ final class AuthorizationMatrixTest extends TestCase
     }
 
     /**
-     * @param  array{subjectId: string, classroomId: string, teacherId: string, studentId: string, tokens: array<string, string|null>}  $world
+     * @param  array{subjectId: string, topicId: string, classroomId: string, teacherId: string, studentId: string, tokens: array<string, string|null>}  $world
      * @return array<string, mixed>
      */
     private function bodyFor(string $uriTemplate, array $world): array
@@ -161,6 +167,8 @@ final class AuthorizationMatrixTest extends TestCase
             '/classrooms/{classroom}' => ['name' => 'Química 1', 'subject_id' => $world['subjectId']],
             '/classrooms/{classroom}/teachers' => ['teacher_ids' => [$world['teacherId']]],
             '/classrooms/{classroom}/students' => ['students' => [['id' => (string) Str::uuid(), 'name' => 'Nova Aluna']]],
+            '/subjects/{subject}/topics' => ['id' => (string) Str::uuid(), 'name' => 'Conteúdo '.uniqid(), 'description' => ''],
+            '/topics/{topic}' => ['name' => 'Conteúdo '.uniqid()],
             default => [],
         };
     }

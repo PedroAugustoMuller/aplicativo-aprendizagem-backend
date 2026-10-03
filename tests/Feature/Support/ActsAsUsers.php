@@ -59,4 +59,15 @@ trait ActsAsUsers
 
         return $id;
     }
+
+    protected function makeTopic(string $subjectId, string $name = 'Átomos', int $position = 0): string
+    {
+        $id = (string) Str::uuid7();
+        DB::table('topics')->insert([
+            'id' => $id, 'subject_id' => $subjectId, 'name' => $name, 'description' => '',
+            'position' => $position, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        return $id;
+    }
 }
