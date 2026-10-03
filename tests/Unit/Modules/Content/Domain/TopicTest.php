@@ -65,12 +65,13 @@ final class TopicTest extends TestCase
 
         self::assertTrue($new->isNew());
         self::assertFalse($restored->isNew());
-        self::assertFalse($restored->detailsChanged());
+        self::assertFalse($restored->nameChanged());
+        self::assertFalse($restored->descriptionChanged());
         self::assertFalse($restored->activationChanged());
         self::assertTrue($restored->isActive());
     }
 
-    public function test_renaming_and_describing_mark_only_the_details_as_changed(): void
+    public function test_renaming_and_describing_mark_name_and_description_as_changed(): void
     {
         $topic = Topic::restore(TopicId::random(), SubjectId::random(), new TopicName('Átomos'), 'Velha.', 0, null);
 
@@ -79,8 +80,19 @@ final class TopicTest extends TestCase
 
         self::assertSame('Átomos e Íons', $topic->name()->value());
         self::assertSame('Nova.', $topic->description());
-        self::assertTrue($topic->detailsChanged());
+        self::assertTrue($topic->nameChanged());
+        self::assertTrue($topic->descriptionChanged());
         self::assertFalse($topic->activationChanged());
+    }
+
+    public function test_changing_only_the_description_leaves_the_name_unchanged(): void
+    {
+        $topic = Topic::restore(TopicId::random(), SubjectId::random(), new TopicName('Átomos'), 'Velha.', 0, null);
+
+        $topic->changeDescription('Nova.');
+
+        self::assertFalse($topic->nameChanged());
+        self::assertTrue($topic->descriptionChanged());
     }
 
     public function test_a_description_longer_than_500_characters_is_rejected(): void
@@ -103,7 +115,8 @@ final class TopicTest extends TestCase
         self::assertFalse($topic->isActive());
         self::assertSame($first, $topic->deactivatedAt());
         self::assertTrue($topic->activationChanged());
-        self::assertFalse($topic->detailsChanged());
+        self::assertFalse($topic->nameChanged());
+        self::assertFalse($topic->descriptionChanged());
 
         $topic->reactivate();
 

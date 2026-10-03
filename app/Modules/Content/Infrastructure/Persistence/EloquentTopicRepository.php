@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Modules\Content\Infrastructure\Persistence;
 
 use App\Modules\Content\Domain\Entity\Topic;
+use App\Modules\Content\Domain\Exception\TopicNameAlreadyTakenException;
 use App\Modules\Content\Domain\Repository\TopicRepository;
 use App\Modules\Content\Domain\ValueObject\SubjectId;
 use App\Modules\Content\Domain\ValueObject\TopicId;
 use App\Modules\Content\Domain\ValueObject\TopicName;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 final class EloquentTopicRepository implements TopicRepository
@@ -38,6 +40,16 @@ final class EloquentTopicRepository implements TopicRepository
 
     public function append(TopicId $id, SubjectId $subjectId, TopicName $name, string $description): Topic
     {
+        try {
+            return $this->appendInTransaction($id, $subjectId, $name, $description);
+        } catch (UniqueConstraintViolationException) {
+            // Two requests passed the name pre-check together; the index decided.
+            throw new TopicNameAlreadyTakenException($name->value());
+        }
+    }
+
+    private function appendInTransaction(TopicId $id, SubjectId $subjectId, TopicName $name, string $description): Topic
+    {
         return DB::transaction(function () use ($id, $subjectId, $name, $description): Topic {
             // max()+1 is only safe while no one else computes it for this subject:
             // the subject row lock serialises appends (and reorders) per subject.
@@ -55,7 +67,11 @@ final class EloquentTopicRepository implements TopicRepository
     public function save(Topic $topic): void
     {
         if ($topic->isNew()) {
-            TopicModel::query()->updateOrCreate(['id' => $topic->id()->value()], $this->mapper->toAttributes($topic));
+            try {
+                TopicModel::query()->updateOrCreate(['id' => $topic->id()->value()], $this->mapper->toAttributes($topic));
+            } catch (UniqueConstraintViolationException) {
+                throw new TopicNameAlreadyTakenException($topic->name()->value());
+            }
 
             return;
         }
@@ -64,8 +80,11 @@ final class EloquentTopicRepository implements TopicRepository
         // undo a concurrent rename or (de)activation of the same topic.
         $changes = [];
 
-        if ($topic->detailsChanged()) {
+        if ($topic->nameChanged()) {
             $changes['name'] = $topic->name()->value();
+        }
+
+        if ($topic->descriptionChanged()) {
             $changes['description'] = $topic->description();
         }
 
@@ -73,8 +92,14 @@ final class EloquentTopicRepository implements TopicRepository
             $changes['deactivated_at'] = $topic->deactivatedAt();
         }
 
-        if ($changes !== []) {
+        if ($changes === []) {
+            return;
+        }
+
+        try {
             TopicModel::query()->whereKey($topic->id()->value())->update($changes);
+        } catch (UniqueConstraintViolationException) {
+            throw new TopicNameAlreadyTakenException($topic->name()->value());
         }
     }
 

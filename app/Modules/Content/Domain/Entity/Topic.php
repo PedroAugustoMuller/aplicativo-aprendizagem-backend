@@ -21,7 +21,9 @@ final class Topic
      */
     private bool $isNew = true;
 
-    private bool $detailsChanged = false;
+    private bool $nameChanged = false;
+
+    private bool $descriptionChanged = false;
 
     private bool $activationChanged = false;
 
@@ -93,7 +95,7 @@ final class Topic
     public function rename(TopicName $name): void
     {
         $this->name = $name;
-        $this->detailsChanged = true;
+        $this->nameChanged = true;
     }
 
     public function changeDescription(string $description): void
@@ -102,7 +104,7 @@ final class Topic
         self::assertDescription($trimmed);
 
         $this->description = $trimmed;
-        $this->detailsChanged = true;
+        $this->descriptionChanged = true;
     }
 
     /** Idempotent: deactivating an already-inactive topic keeps the first timestamp. */
@@ -128,10 +130,16 @@ final class Topic
         return $this->isNew;
     }
 
-    /** Name or description changed since it was restored. */
-    public function detailsChanged(): bool
+    /** Renamed since it was restored. */
+    public function nameChanged(): bool
     {
-        return $this->detailsChanged;
+        return $this->nameChanged;
+    }
+
+    /** Description changed since it was restored. */
+    public function descriptionChanged(): bool
+    {
+        return $this->descriptionChanged;
     }
 
     /** Deactivated or reactivated since it was restored. */

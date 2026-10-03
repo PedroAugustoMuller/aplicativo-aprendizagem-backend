@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Modules\Content;
 
 use App\Modules\Content\Domain\Entity\Topic;
+use App\Modules\Content\Domain\Exception\TopicNameAlreadyTakenException;
 use App\Modules\Content\Domain\Repository\TopicRepository;
 use App\Modules\Content\Domain\ValueObject\SubjectId;
 use App\Modules\Content\Domain\ValueObject\TopicId;
@@ -93,6 +94,63 @@ final class EloquentTopicRepositoryTest extends TestCase
         self::assertNotNull($stored);
         self::assertSame('Átomos e Íons', $stored->name()->value());
         self::assertFalse($stored->isActive());
+    }
+
+    public function test_a_rename_and_a_concurrent_description_change_both_survive(): void
+    {
+        $subjectId = $this->createSubject();
+        $id = TopicId::random();
+        $this->repository()->save(new Topic($id, $subjectId, new TopicName('Átomos'), 'Velha.', 0));
+
+        $renaming = $this->repository()->findById($id);
+        $describing = $this->repository()->findById($id);
+        self::assertNotNull($renaming);
+        self::assertNotNull($describing);
+
+        $renaming->rename(new TopicName('Átomos e Íons'));
+        $describing->changeDescription('Nova.');
+        $this->repository()->save($renaming);
+        $this->repository()->save($describing);
+
+        $stored = $this->repository()->findById($id);
+        self::assertNotNull($stored);
+        self::assertSame('Átomos e Íons', $stored->name()->value());
+        self::assertSame('Nova.', $stored->description());
+    }
+
+    public function test_append_with_a_name_already_stored_reports_the_clash(): void
+    {
+        $subjectId = $this->createSubject();
+        $this->repository()->append(TopicId::random(), $subjectId, new TopicName('Átomos'), '');
+
+        $this->expectException(TopicNameAlreadyTakenException::class);
+
+        $this->repository()->append(TopicId::random(), $subjectId, new TopicName('Átomos'), '');
+    }
+
+    public function test_saving_a_new_topic_with_a_name_already_stored_reports_the_clash(): void
+    {
+        $subjectId = $this->createSubject();
+        $this->repository()->append(TopicId::random(), $subjectId, new TopicName('Átomos'), '');
+
+        $this->expectException(TopicNameAlreadyTakenException::class);
+
+        $this->repository()->save(new Topic(TopicId::random(), $subjectId, new TopicName('Átomos'), '', 5));
+    }
+
+    public function test_renaming_to_a_name_already_stored_reports_the_clash(): void
+    {
+        $subjectId = $this->createSubject();
+        $this->repository()->append(TopicId::random(), $subjectId, new TopicName('Átomos'), '');
+        $other = $this->repository()->append(TopicId::random(), $subjectId, new TopicName('Íons'), '');
+
+        $topic = $this->repository()->findById($other->id());
+        self::assertNotNull($topic);
+        $topic->rename(new TopicName('Átomos'));
+
+        $this->expectException(TopicNameAlreadyTakenException::class);
+
+        $this->repository()->save($topic);
     }
 
     public function test_append_places_a_topic_after_the_last_one(): void
