@@ -19,6 +19,7 @@ use App\Modules\Identity\Infrastructure\Auth\EncryptedCredentialVault;
 use App\Modules\Identity\Infrastructure\Auth\SanctumTokenIssuer;
 use App\Modules\Identity\Infrastructure\Auth\SanctumTokenRevoker;
 use App\Modules\Identity\Infrastructure\Console\CreateAdminCommand;
+use App\Modules\Identity\Infrastructure\Contract\EloquentClassroomRoster;
 use App\Modules\Identity\Infrastructure\Contract\EloquentTeachingAssignments;
 use App\Modules\Identity\Infrastructure\Persistence\DatabaseTransactionManager;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentAccountListReader;
@@ -26,6 +27,7 @@ use App\Modules\Identity\Infrastructure\Persistence\EloquentClassroomListReader;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentClassroomRepository;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentStudentSearchReader;
 use App\Modules\Identity\Infrastructure\Persistence\EloquentUserRepository;
+use App\Shared\Domain\Contract\ClassroomRoster;
 use App\Shared\Domain\Contract\TeachingAssignments;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -45,6 +47,7 @@ final class IdentityServiceProvider extends ServiceProvider
         $this->app->bind(AccountListReader::class, EloquentAccountListReader::class);
         $this->app->bind(StudentSearchReader::class, EloquentStudentSearchReader::class);
         $this->app->bind(TeachingAssignments::class, EloquentTeachingAssignments::class);
+        $this->app->bind(ClassroomRoster::class, EloquentClassroomRoster::class);
     }
 
     public function boot(): void

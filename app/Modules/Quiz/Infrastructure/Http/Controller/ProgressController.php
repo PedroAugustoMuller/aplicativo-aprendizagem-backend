@@ -1,0 +1,95 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Modules\Quiz\Infrastructure\Http\Controller;
+
+use App\Modules\Quiz\Application\DTO\AttemptSummaryView;
+use App\Modules\Quiz\Application\DTO\TopicHistoryView;
+use App\Modules\Quiz\Application\DTO\TopicProgressView;
+use App\Modules\Quiz\Application\DTO\WrongQuestionView;
+use App\Modules\Quiz\Application\Query\GetSubjectProgress\GetSubjectProgressHandler;
+use App\Modules\Quiz\Application\Query\GetSubjectProgress\GetSubjectProgressQuery;
+use App\Modules\Quiz\Application\Query\GetTopicHistory\GetTopicHistoryHandler;
+use App\Modules\Quiz\Application\Query\GetTopicHistory\GetTopicHistoryQuery;
+use App\Modules\Quiz\Application\Query\GetWrongQuestions\GetWrongQuestionsHandler;
+use App\Modules\Quiz\Application\Query\GetWrongQuestions\GetWrongQuestionsQuery;
+use App\Modules\Quiz\Domain\ValueObject\SnapshotOption;
+use App\Modules\Quiz\Domain\ValueObject\Tier;
+use App\Shared\Infrastructure\Http\ActorFactory;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+final class ProgressController
+{
+    public function __construct(private readonly ActorFactory $actors) {}
+
+    public function subject(Request $request, string $id, GetSubjectProgressHandler $handler): JsonResponse
+    {
+        $views = $handler->handle(new GetSubjectProgressQuery($this->actors->fromRequest($request), $id));
+
+        return new JsonResponse(['data' => array_map($this->topicProgress(...), $views)]);
+    }
+
+    public function history(Request $request, string $id, GetTopicHistoryHandler $handler): JsonResponse
+    {
+        return new JsonResponse(['data' => $this->historyOf($handler->handle(new GetTopicHistoryQuery($this->actors->fromRequest($request), $id)))]);
+    }
+
+    public function wrong(Request $request, string $id, GetWrongQuestionsHandler $handler): JsonResponse
+    {
+        $views = $handler->handle(new GetWrongQuestionsQuery($this->actors->fromRequest($request), $id));
+
+        return new JsonResponse(['data' => array_map($this->wrongOf(...), $views)]);
+    }
+
+    /** @return array{topic_id: string, points: int, tier: string, next_tier: array{tier: string, points: int}|null} */
+    private function topicProgress(TopicProgressView $view): array
+    {
+        return ['topic_id' => $view->topicId, 'points' => $view->points, 'tier' => $view->tier->value, 'next_tier' => $this->nextTier($view->nextTier)];
+    }
+
+    /** @return array{tier: string, points: int}|null */
+    private function nextTier(?Tier $tier): ?array
+    {
+        return $tier === null ? null : ['tier' => $tier->value, 'points' => $tier->threshold()];
+    }
+
+    /** @return array<string, mixed> */
+    private function historyOf(TopicHistoryView $view): array
+    {
+        return [
+            'points' => $view->points,
+            'tier' => $view->tier->value,
+            'next_tier' => $this->nextTier($view->nextTier),
+            'attempts' => array_map(static fn (AttemptSummaryView $a): array => [
+                'id' => $a->id,
+                'started_at' => $a->startedAt,
+                'completed_at' => $a->completedAt,
+                'total' => $a->total,
+                'answered' => $a->answered,
+                'correct' => $a->correct,
+                'points_before' => $a->pointsBefore,
+                'points_after' => $a->pointsAfter,
+                'points_change' => $a->pointsChange(),
+                'tier_before' => $a->tierBefore->value,
+                'tier_after' => $a->tierAfter->value,
+            ], $view->attempts),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function wrongOf(WrongQuestionView $view): array
+    {
+        return [
+            'question_id' => $view->questionId,
+            'type' => $view->type,
+            'statement' => $view->statement,
+            'options' => array_map(static fn (SnapshotOption $o): array => ['id' => $o->id, 'text' => $o->text], $view->options),
+            'chosen_option_id' => $view->chosenOptionId,
+            'correct_option_id' => $view->correctOptionId,
+            'explanation' => $view->explanation,
+            'answered_at' => $view->answeredAt,
+        ];
+    }
+}

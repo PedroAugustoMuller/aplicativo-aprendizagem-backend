@@ -158,8 +158,13 @@ needs a fact that only the other owns, the contract lives in
   active questions, with options and the correct one, does it hold?" `Content`
   owns topics and questions and implements it (`EloquentQuestionBank`); bound
   in `ContentServiceProvider`. `Quiz` depends on it to snapshot a new attempt.
+- `ClassroomRoster` — "which subject, teachers and enrolled students (id,
+  name, username) does this classroom have?" `Identity` owns classrooms and
+  implements it (`EloquentClassroomRoster`); bound in
+  `IdentityServiceProvider`. `Quiz` depends on it to show a classroom's
+  progress to its teachers.
 
-Both interfaces live in `Shared`, not in the module that happens to consume
+These interfaces live in `Shared`, not in the module that happens to consume
 them, because a future module (`Quiz`, `Scoring`) will need the same facts
 without either existing module importing it.
 

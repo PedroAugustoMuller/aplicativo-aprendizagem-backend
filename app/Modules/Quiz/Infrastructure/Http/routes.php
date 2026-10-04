@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Quiz\Infrastructure\Http\Controller\ProgressController;
 use App\Modules\Quiz\Infrastructure\Http\Controller\QuizController;
 use Illuminate\Support\Facades\Route;
 
@@ -10,4 +11,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'password.changed', 'role:s
     Route::post('/topics/{id}/quiz-attempts', [QuizController::class, 'start'])->whereUuid('id');
     Route::get('/quiz-attempts/{id}', [QuizController::class, 'show'])->whereUuid('id');
     Route::post('/quiz-attempts/{id}/answers', [QuizController::class, 'answer'])->whereUuid('id');
+    Route::get('/subjects/{id}/quiz-progress', [ProgressController::class, 'subject'])->whereUuid('id');
+    Route::get('/topics/{id}/quiz-history', [ProgressController::class, 'history'])->whereUuid('id');
+    Route::get('/topics/{id}/wrong-questions', [ProgressController::class, 'wrong'])->whereUuid('id');
 });
