@@ -5,9 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Quiz\Infrastructure\Http\Controller;
 
 use App\Modules\Quiz\Application\DTO\AttemptSummaryView;
+use App\Modules\Quiz\Application\DTO\StudentProgressView;
 use App\Modules\Quiz\Application\DTO\TopicHistoryView;
 use App\Modules\Quiz\Application\DTO\TopicProgressView;
 use App\Modules\Quiz\Application\DTO\WrongQuestionView;
+use App\Modules\Quiz\Application\Query\GetClassroomProgress\GetClassroomProgressHandler;
+use App\Modules\Quiz\Application\Query\GetClassroomProgress\GetClassroomProgressQuery;
+use App\Modules\Quiz\Application\Query\GetStudentAttempt\GetStudentAttemptHandler;
+use App\Modules\Quiz\Application\Query\GetStudentAttempt\GetStudentAttemptQuery;
 use App\Modules\Quiz\Application\Query\GetSubjectProgress\GetSubjectProgressHandler;
 use App\Modules\Quiz\Application\Query\GetSubjectProgress\GetSubjectProgressQuery;
 use App\Modules\Quiz\Application\Query\GetTopicHistory\GetTopicHistoryHandler;
@@ -16,13 +21,14 @@ use App\Modules\Quiz\Application\Query\GetWrongQuestions\GetWrongQuestionsHandle
 use App\Modules\Quiz\Application\Query\GetWrongQuestions\GetWrongQuestionsQuery;
 use App\Modules\Quiz\Domain\ValueObject\SnapshotOption;
 use App\Modules\Quiz\Domain\ValueObject\Tier;
+use App\Modules\Quiz\Infrastructure\Http\Presenter\AttemptPresenter;
 use App\Shared\Infrastructure\Http\ActorFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 final class ProgressController
 {
-    public function __construct(private readonly ActorFactory $actors) {}
+    public function __construct(private readonly ActorFactory $actors, private readonly AttemptPresenter $presenter) {}
 
     public function subject(Request $request, string $id, GetSubjectProgressHandler $handler): JsonResponse
     {
@@ -41,6 +47,37 @@ final class ProgressController
         $views = $handler->handle(new GetWrongQuestionsQuery($this->actors->fromRequest($request), $id));
 
         return new JsonResponse(['data' => array_map($this->wrongOf(...), $views)]);
+    }
+
+    public function classroom(Request $request, string $id, GetClassroomProgressHandler $handler): JsonResponse
+    {
+        $view = $handler->handle(new GetClassroomProgressQuery($this->actors->fromRequest($request), $id));
+
+        return new JsonResponse(['data' => ['students' => array_map(static fn (StudentProgressView $s): array => [
+            'id' => $s->id,
+            'name' => $s->name,
+            'username' => $s->username,
+            'topics' => array_map(static fn (TopicProgressView $t): array => ['topic_id' => $t->topicId, 'points' => $t->points, 'tier' => $t->tier->value], $s->topics),
+        ], $view->students)]]);
+    }
+
+    public function studentHistory(Request $request, string $id, string $studentId, string $topicId, GetTopicHistoryHandler $handler): JsonResponse
+    {
+        return new JsonResponse(['data' => $this->historyOf($handler->handle(new GetTopicHistoryQuery($this->actors->fromRequest($request), $topicId, $id, $studentId)))]);
+    }
+
+    public function studentWrong(Request $request, string $id, string $studentId, string $topicId, GetWrongQuestionsHandler $handler): JsonResponse
+    {
+        $views = $handler->handle(new GetWrongQuestionsQuery($this->actors->fromRequest($request), $topicId, $id, $studentId));
+
+        return new JsonResponse(['data' => array_map($this->wrongOf(...), $views)]);
+    }
+
+    public function studentAttempt(Request $request, string $id, string $studentId, string $attemptId, GetStudentAttemptHandler $handler): JsonResponse
+    {
+        $view = $handler->handle(new GetStudentAttemptQuery($this->actors->fromRequest($request), $id, $studentId, $attemptId));
+
+        return new JsonResponse(['data' => $this->presenter->attempt($view)]);
     }
 
     /** @return array{topic_id: string, points: int, tier: string, next_tier: array{tier: string, points: int}|null} */

@@ -70,6 +70,10 @@ final class AuthorizationMatrixTest extends TestCase
         yield 'subject quiz progress' => ['GET', '/subjects/{subject}/quiz-progress', self::row(401, 200, 403, 403, 403)];
         yield 'topic quiz history' => ['GET', '/topics/{topic}/quiz-history', self::row(401, 200, 403, 403, 403)];
         yield 'topic wrong questions' => ['GET', '/topics/{topic}/wrong-questions', self::row(401, 200, 403, 403, 403)];
+        yield 'classroom quiz progress' => ['GET', '/classrooms/{classroom}/quiz-progress', self::row(401, 403, 403, 200, 200)];
+        yield 'student topic history' => ['GET', '/classrooms/{classroom}/students/{student}/topics/{topic}/quiz-history', self::row(401, 403, 403, 200, 200)];
+        yield 'student wrong questions' => ['GET', '/classrooms/{classroom}/students/{student}/topics/{topic}/wrong-questions', self::row(401, 403, 403, 200, 200)];
+        yield 'student quiz attempt' => ['GET', '/classrooms/{classroom}/students/{student}/quiz-attempts/{completed}', self::row(401, 403, 403, 200, 200)];
     }
 
     /** @return array<string, int> */
@@ -84,8 +88,8 @@ final class AuthorizationMatrixTest extends TestCase
     {
         $world = $this->buildWorld();
         $uri = '/api/v1'.str_replace(
-            ['{classroom}', '{student}', '{teacher}', '{subject}', '{topic}', '{question}', '{attempt}'],
-            [$world['classroomId'], $world['studentId'], $world['teacherId'], $world['subjectId'], $world['topicId'], $world['questionId'], $world['attemptId']],
+            ['{classroom}', '{student}', '{teacher}', '{subject}', '{topic}', '{question}', '{attempt}', '{completed}'],
+            [$world['classroomId'], $world['studentId'], $world['teacherId'], $world['subjectId'], $world['topicId'], $world['questionId'], $world['attemptId'], $world['completedAttemptId']],
             $uriTemplate,
         );
         $body = $this->bodyFor($uriTemplate, $world);
@@ -135,6 +139,7 @@ final class AuthorizationMatrixTest extends TestCase
      *     classroomId: string,
      *     attemptId: string,
      *     attemptQuestionId: string,
+     *     completedAttemptId: string,
      *     optionId: string,
      *     teacherId: string,
      *     studentId: string,
@@ -156,6 +161,7 @@ final class AuthorizationMatrixTest extends TestCase
         $topicId = $this->makeTopic($subjectId);
         $quizQuestion = $this->makeQuestionWithOptions($topicId, [['Na', true], ['S', false]]);
         $attempt = $this->makeAttempt(EloquentAttribute::string($student->getKey(), 'users.id'), $topicId, $subjectId, $quizQuestion);
+        $completed = $this->makeAnsweredAttempt(EloquentAttribute::string($student->getKey(), 'users.id'), $topicId, $subjectId, [true], '2026-10-01 10:00');
 
         return [
             'subjectId' => $subjectId,
@@ -164,6 +170,7 @@ final class AuthorizationMatrixTest extends TestCase
             'classroomId' => $classroomId,
             'attemptId' => $attempt['attemptId'],
             'attemptQuestionId' => $attempt['attemptQuestionId'],
+            'completedAttemptId' => $completed['attemptId'],
             'optionId' => $quizQuestion['options'][0],
             'teacherId' => EloquentAttribute::string($teacher->getKey(), 'users.id'),
             'studentId' => EloquentAttribute::string($student->getKey(), 'users.id'),
@@ -178,7 +185,7 @@ final class AuthorizationMatrixTest extends TestCase
     }
 
     /**
-     * @param  array{subjectId: string, topicId: string, questionId: string, classroomId: string, attemptId: string, attemptQuestionId: string, optionId: string, teacherId: string, studentId: string, tokens: array<string, string|null>}  $world
+     * @param  array{subjectId: string, topicId: string, questionId: string, classroomId: string, attemptId: string, attemptQuestionId: string, completedAttemptId: string, optionId: string, teacherId: string, studentId: string, tokens: array<string, string|null>}  $world
      * @return array<string, mixed>
      */
     private function bodyFor(string $uriTemplate, array $world): array
