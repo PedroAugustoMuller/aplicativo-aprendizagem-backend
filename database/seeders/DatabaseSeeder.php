@@ -8,6 +8,7 @@ use App\Modules\Content\Database\Seeders\ChemistryQuestionsSeeder;
 use App\Modules\Content\Database\Seeders\ChemistryTopicsSeeder;
 use App\Modules\Content\Database\Seeders\SubjectsSeeder;
 use App\Modules\Identity\Database\Seeders\DevelopmentAccountsSeeder;
+use App\Modules\Quiz\Database\Seeders\DevelopmentQuizSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -25,6 +26,7 @@ class DatabaseSeeder extends Seeder
             ChemistryTopicsSeeder::class,
             ChemistryQuestionsSeeder::class,
             DevelopmentAccountsSeeder::class,
+            DevelopmentQuizSeeder::class,
         ]);
     }
 }

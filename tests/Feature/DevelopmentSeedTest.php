@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Modules\Identity\Database\Seeders\DevelopmentAccountsSeeder;
+use App\Modules\Quiz\Database\Seeders\DevelopmentQuizSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -30,11 +31,13 @@ final class DevelopmentSeedTest extends TestCase
             // itself as running in production, which is a different guard than
             // the one this test exercises.
             $this->artisan('db:seed', ['--class' => DevelopmentAccountsSeeder::class, '--force' => true]);
+            $this->artisan('db:seed', ['--class' => DevelopmentQuizSeeder::class, '--force' => true]);
         } finally {
             $this->app['env'] = $original;
         }
 
         self::assertSame(0, DB::table('users')->count());
+        self::assertSame(0, DB::table('quiz_attempts')->count());
     }
 
     public function test_reseeding_twice_leaves_the_dataset_at_the_same_size(): void
@@ -52,6 +55,26 @@ final class DevelopmentSeedTest extends TestCase
         self::assertSame(11, DB::table('questions')->where('topic_id', $periodicTable)->count());
         self::assertSame(1, DB::table('classrooms')->count());
         self::assertSame(1, DB::table('pending_credentials')->count());
+        self::assertSame(2, DB::table('quiz_attempts')->count());
+        self::assertSame(20, DB::table('quiz_attempt_questions')->count());
+    }
+
+    public function test_carla_has_two_finished_quizzes_in_the_periodic_table(): void
+    {
+        $this->seed();
+
+        $topicId = DB::table('topics')->where('name', 'Tabela Periódica')->value('id');
+        self::assertIsString($topicId);
+        self::assertSame(2, DB::table('quiz_attempts')->where('student_id', '0192f0a0-0000-7000-8000-000000000012')->whereNotNull('completed_at')->count());
+
+        $this->withHeader('Authorization', 'Bearer '.$this->tokenFor('carla.dias', 'password'))
+            ->getJson("/api/v1/topics/$topicId/quiz-history")
+            ->assertOk()
+            ->assertJsonPath('data.points', 100)
+            ->assertJsonPath('data.tier', 'bronze')
+            ->assertJsonPath('data.attempts.0.points_change', 40)
+            ->assertJsonPath('data.attempts.1.points_change', 60)
+            ->assertJsonCount(2, 'data.attempts');
     }
 
     public function test_diego_logs_in_with_the_reissued_temporary_password_and_must_change_it(): void
