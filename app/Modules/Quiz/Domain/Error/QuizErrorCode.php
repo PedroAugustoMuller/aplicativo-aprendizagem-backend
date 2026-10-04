@@ -14,6 +14,8 @@ enum QuizErrorCode: string implements ErrorCode
     case TopicHasNoQuestions = 'quiz.topic.no_questions';
     case QuestionAlreadyAnswered = 'quiz.question.already_answered';
     case InvalidAnswerOption = 'quiz.answer.invalid_option';
+    case ClassroomNotFound = 'quiz.classroom_not_found';
+    case StudentNotFound = 'quiz.student_not_found';
 
     public function code(): string
     {
