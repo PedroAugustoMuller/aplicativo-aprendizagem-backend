@@ -6,6 +6,7 @@ namespace Tests\Feature\Support;
 
 use App\Modules\Identity\Domain\ValueObject\UserId;
 use App\Modules\Identity\Infrastructure\Persistence\UserModel;
+use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -136,5 +137,45 @@ trait ActsAsUsers
         ]);
 
         return ['attemptId' => $attemptId, 'attemptQuestionId' => $attemptQuestionId];
+    }
+
+    /**
+     * An attempt whose question i is answered at $startedAt + i minutes: right if $answers[i], wrong otherwise.
+     * Pass $reuse to snapshot existing bank questions instead of creating new ones (same order as $answers).
+     *
+     * @param  list<bool>  $answers
+     * @param  list<array{id: string, options: list<string>}>|null  $reuse
+     * @return array{attemptId: string, questionIds: list<string>, attemptQuestionIds: list<string>}
+     */
+    protected function makeAnsweredAttempt(string $studentId, string $topicId, string $subjectId, array $answers, string $startedAt, bool $complete = true, ?array $reuse = null): array
+    {
+        $start = new DateTimeImmutable($startedAt);
+        $attemptId = (string) Str::uuid7();
+        DB::table('quiz_attempts')->insert([
+            'id' => $attemptId, 'student_id' => $studentId, 'topic_id' => $topicId, 'subject_id' => $subjectId,
+            'started_at' => $start, 'completed_at' => $complete ? $start->modify('+'.count($answers).' minutes') : null,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $questionIds = [];
+        $attemptQuestionIds = [];
+
+        foreach ($answers as $position => $correct) {
+            $question = $reuse[$position] ?? $this->makeQuestionWithOptions($topicId, [['Certa', true], ['Errada', false]]);
+            $chosen = $correct ? $question['options'][0] : $question['options'][1];
+            $questionIds[] = $question['id'];
+            $attemptQuestionIds[] = $attemptQuestionId = (string) Str::uuid7();
+            DB::table('quiz_attempt_questions')->insert([
+                'id' => $attemptQuestionId, 'attempt_id' => $attemptId, 'position' => $position, 'question_id' => $question['id'],
+                'type' => 'multiple_choice', 'statement' => 'Pergunta '.$question['id'], 'explanation' => 'Porque sim.',
+                'options' => json_encode([['id' => $question['options'][0], 'text' => 'Certa'], ['id' => $question['options'][1], 'text' => 'Errada']], JSON_THROW_ON_ERROR),
+                'correct_option_id' => $question['options'][0],
+                'answer_id' => (string) Str::uuid7(), 'chosen_option_id' => $chosen, 'option_id' => $chosen,
+                'is_correct' => $correct, 'answered_at' => $start->modify("+$position minutes"),
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        return ['attemptId' => $attemptId, 'questionIds' => $questionIds, 'attemptQuestionIds' => $attemptQuestionIds];
     }
 }

@@ -49,8 +49,12 @@ final class AttemptMapper
         return array_map(static fn (SnapshotOption $o): array => ['id' => $o->id, 'text' => $o->text], $question->options());
     }
 
-    /** @return list<SnapshotOption> */
-    private function options(mixed $raw): array
+    /**
+     * The snapshot options as decoded from their JSON column; also used by the progress reader.
+     *
+     * @return list<SnapshotOption>
+     */
+    public function options(mixed $raw): array
     {
         if (! is_array($raw)) {
             throw new UnexpectedValueException('Expected a list for quiz_attempt_questions.options.');
