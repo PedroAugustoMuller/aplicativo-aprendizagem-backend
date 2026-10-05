@@ -73,6 +73,8 @@ final class AuthorizationMatrixTest extends TestCase
         yield 'classroom quiz progress' => ['GET', '/classrooms/{classroom}/quiz-progress', self::row(401, 403, 403, 200, 200)];
         yield 'student topic history' => ['GET', '/classrooms/{classroom}/students/{student}/topics/{topic}/quiz-history', self::row(401, 403, 403, 200, 200)];
         yield 'student wrong questions' => ['GET', '/classrooms/{classroom}/students/{student}/topics/{topic}/wrong-questions', self::row(401, 403, 403, 200, 200)];
+        yield 'classroom question summary' => ['GET', '/classrooms/{classroom}/topics/{topic}/question-summary', self::row(401, 403, 403, 200, 200)];
+        yield 'subject question summary' => ['GET', '/topics/{topic}/question-summary', self::row(401, 403, 403, 200, 200)];
         yield 'student quiz attempt' => ['GET', '/classrooms/{classroom}/students/{student}/quiz-attempts/{completed}', self::row(401, 403, 403, 200, 200)];
     }
 

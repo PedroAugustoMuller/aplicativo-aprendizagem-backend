@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Quiz\Infrastructure\Http\Controller;
 
 use App\Modules\Quiz\Application\DTO\AttemptSummaryView;
+use App\Modules\Quiz\Application\DTO\QuestionSummaryView;
 use App\Modules\Quiz\Application\DTO\StudentProgressView;
 use App\Modules\Quiz\Application\DTO\TopicHistoryView;
 use App\Modules\Quiz\Application\DTO\TopicProgressView;
 use App\Modules\Quiz\Application\DTO\WrongQuestionView;
 use App\Modules\Quiz\Application\Query\GetClassroomProgress\GetClassroomProgressHandler;
 use App\Modules\Quiz\Application\Query\GetClassroomProgress\GetClassroomProgressQuery;
+use App\Modules\Quiz\Application\Query\GetQuestionSummary\GetQuestionSummaryHandler;
+use App\Modules\Quiz\Application\Query\GetQuestionSummary\GetQuestionSummaryQuery;
 use App\Modules\Quiz\Application\Query\GetStudentAttempt\GetStudentAttemptHandler;
 use App\Modules\Quiz\Application\Query\GetStudentAttempt\GetStudentAttemptQuery;
 use App\Modules\Quiz\Application\Query\GetSubjectProgress\GetSubjectProgressHandler;
@@ -19,6 +22,8 @@ use App\Modules\Quiz\Application\Query\GetTopicHistory\GetTopicHistoryHandler;
 use App\Modules\Quiz\Application\Query\GetTopicHistory\GetTopicHistoryQuery;
 use App\Modules\Quiz\Application\Query\GetWrongQuestions\GetWrongQuestionsHandler;
 use App\Modules\Quiz\Application\Query\GetWrongQuestions\GetWrongQuestionsQuery;
+use App\Modules\Quiz\Domain\ValueObject\OptionCount;
+use App\Modules\Quiz\Domain\ValueObject\QuestionStats;
 use App\Modules\Quiz\Domain\ValueObject\SnapshotOption;
 use App\Modules\Quiz\Domain\ValueObject\Tier;
 use App\Modules\Quiz\Infrastructure\Http\Presenter\AttemptPresenter;
@@ -78,6 +83,35 @@ final class ProgressController
         $view = $handler->handle(new GetStudentAttemptQuery($this->actors->fromRequest($request), $id, $studentId, $attemptId));
 
         return new JsonResponse(['data' => $this->presenter->attempt($view)]);
+    }
+
+    public function classroomSummary(Request $request, string $id, string $topicId, GetQuestionSummaryHandler $handler): JsonResponse
+    {
+        return new JsonResponse(['data' => $this->summaryOf($handler->handle(new GetQuestionSummaryQuery($this->actors->fromRequest($request), $topicId, $id)))]);
+    }
+
+    public function subjectSummary(Request $request, string $topicId, GetQuestionSummaryHandler $handler): JsonResponse
+    {
+        return new JsonResponse(['data' => $this->summaryOf($handler->handle(new GetQuestionSummaryQuery($this->actors->fromRequest($request), $topicId)))]);
+    }
+
+    /** @return array<string, mixed> */
+    private function summaryOf(QuestionSummaryView $view): array
+    {
+        return [
+            'students' => $view->students,
+            'questions' => array_map(static fn (QuestionStats $q): array => [
+                'question_id' => $q->questionId,
+                'type' => $q->type,
+                'statement' => $q->statement,
+                'answered' => $q->answered,
+                'wrong' => $q->wrong,
+                'wrong_percent' => $q->wrongPercent(),
+                'correct_option_id' => $q->correctOptionId,
+                'options' => array_map(static fn (OptionCount $o): array => ['id' => $o->id, 'text' => $o->text, 'chosen' => $o->chosen], $q->options),
+                'other_chosen' => $q->otherChosen,
+            ], $view->questions),
+        ];
     }
 
     /** @return array{topic_id: string, points: int, tier: string, next_tier: array{tier: string, points: int}|null} */

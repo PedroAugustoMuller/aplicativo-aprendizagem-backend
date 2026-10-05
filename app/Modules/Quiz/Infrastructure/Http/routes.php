@@ -22,4 +22,6 @@ Route::middleware(['auth:sanctum', 'account.active', 'password.changed', 'role:s
     Route::get('/classrooms/{id}/students/{studentId}/topics/{topicId}/quiz-history', [ProgressController::class, 'studentHistory'])->whereUuid(['id', 'studentId', 'topicId']);
     Route::get('/classrooms/{id}/students/{studentId}/topics/{topicId}/wrong-questions', [ProgressController::class, 'studentWrong'])->whereUuid(['id', 'studentId', 'topicId']);
     Route::get('/classrooms/{id}/students/{studentId}/quiz-attempts/{attemptId}', [ProgressController::class, 'studentAttempt'])->whereUuid(['id', 'studentId', 'attemptId']);
+    Route::get('/classrooms/{id}/topics/{topicId}/question-summary', [ProgressController::class, 'classroomSummary'])->whereUuid(['id', 'topicId']);
+    Route::get('/topics/{topicId}/question-summary', [ProgressController::class, 'subjectSummary'])->whereUuid('topicId');
 });
