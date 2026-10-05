@@ -8,6 +8,7 @@ use App\Modules\Quiz\Application\DTO\AnsweredQuestionRow;
 use App\Modules\Quiz\Application\DTO\AttemptSummaryRow;
 use App\Modules\Quiz\Application\Port\ProgressReader;
 use App\Modules\Quiz\Domain\ValueObject\ScoredAnswer;
+use App\Modules\Quiz\Domain\ValueObject\SummaryAnswer;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -117,6 +118,39 @@ final class EloquentProgressReader implements ProgressReader
         }
 
         return $answered;
+    }
+
+    public function summaryAnswers(array $studentIds, string $topicId, string $subjectId): array
+    {
+        if ($studentIds === []) {
+            return [];
+        }
+
+        $query = $this->graded($subjectId)
+            ->whereIn('a.student_id', $studentIds)
+            ->where('a.topic_id', $topicId)
+            ->whereNotNull('q.question_id')
+            ->addSelect(['q.question_id', 'q.type', 'q.statement', 'q.options', 'q.chosen_option_id', 'q.correct_option_id', 'a.started_at']);
+
+        $answers = [];
+
+        foreach ($query->get() as $row) {
+            $answers[] = new SummaryAnswer(
+                EloquentAttribute::string($row->student_id, 'quiz_attempts.student_id'),
+                EloquentAttribute::string($row->question_id, 'quiz_attempt_questions.question_id'),
+                EloquentAttribute::string($row->id, 'quiz_attempt_questions.id'),
+                EloquentAttribute::string($row->type, 'quiz_attempt_questions.type'),
+                EloquentAttribute::string($row->statement, 'quiz_attempt_questions.statement'),
+                $this->mapper->options(json_decode(EloquentAttribute::string($row->options, 'quiz_attempt_questions.options'), true, flags: JSON_THROW_ON_ERROR)),
+                EloquentAttribute::string($row->correct_option_id, 'quiz_attempt_questions.correct_option_id'),
+                EloquentAttribute::string($row->chosen_option_id, 'quiz_attempt_questions.chosen_option_id'),
+                (bool) $row->is_correct,
+                $this->time($row->answered_at),
+                $this->time($row->started_at),
+            );
+        }
+
+        return $answers;
     }
 
     private function graded(?string $subjectId): Builder

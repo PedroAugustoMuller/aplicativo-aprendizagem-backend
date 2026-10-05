@@ -26,12 +26,17 @@ final readonly class ProgressAccess
         return new ProgressScope($actor->userId, null);
     }
 
-    /** Staff only: an admin reads any classroom, a teacher only the ones they teach. */
-    public function classroom(Actor $actor, string $classroomId): RosterClassroom
+    public function staff(Actor $actor): void
     {
         if (! $actor->isStaff()) {
             throw new QuizAccessDeniedException;
         }
+    }
+
+    /** Staff only: an admin reads any classroom, a teacher only the ones they teach. */
+    public function classroom(Actor $actor, string $classroomId): RosterClassroom
+    {
+        $this->staff($actor);
 
         $classroom = $this->roster->find($classroomId) ?? throw new ClassroomNotFoundException;
 
@@ -40,6 +45,35 @@ final readonly class ProgressAccess
         }
 
         return $classroom;
+    }
+
+    /**
+     * The students of every active classroom of the subject the actor may read, each once.
+     * A teacher who teaches none of them may not read the subject; an admin just sees nobody.
+     *
+     * @return list<string>
+     */
+    public function subjectStudents(Actor $actor, string $subjectId): array
+    {
+        $this->staff($actor);
+        $readable = array_filter(
+            $this->roster->forSubject($subjectId),
+            static fn (RosterClassroom $c): bool => $c->active && ($actor->isAdmin() || $c->isTaughtBy($actor->userId)),
+        );
+
+        if ($readable === [] && ! $actor->isAdmin()) {
+            throw new QuizAccessDeniedException;
+        }
+
+        $ids = [];
+
+        foreach ($readable as $classroom) {
+            foreach ($classroom->students as $student) {
+                $ids[$student->id] = $student->id;
+            }
+        }
+
+        return array_values($ids);
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Modules\Quiz\Application\DTO\AnsweredQuestionRow;
 use App\Modules\Quiz\Application\DTO\AttemptSummaryRow;
 use App\Modules\Quiz\Application\Port\ProgressReader;
 use App\Modules\Quiz\Domain\ValueObject\ScoredAnswer;
+use App\Modules\Quiz\Domain\ValueObject\SummaryAnswer;
 
 /** Rows are keyed "student|topic|subject"; a null subject filter matches any subject. */
 final class InMemoryProgressReader implements ProgressReader
@@ -20,6 +21,12 @@ final class InMemoryProgressReader implements ProgressReader
 
     /** @var array<string, list<AnsweredQuestionRow>> */
     public array $questions = [];
+
+    /** @var array<string, list<SummaryAnswer>> keyed "topic|subject" */
+    public array $summary = [];
+
+    /** @var list<list<string>> the student ids of each summaryAnswers call */
+    public array $summaryStudents = [];
 
     /** @var list<string> */
     public array $calls = [];
@@ -92,5 +99,15 @@ final class InMemoryProgressReader implements ProgressReader
     public function answeredQuestions(string $studentId, string $topicId, ?string $subjectId): array
     {
         return self::pick($this->questions, $studentId, $topicId, $subjectId);
+    }
+
+    public function summaryAnswers(array $studentIds, string $topicId, string $subjectId): array
+    {
+        $this->summaryStudents[] = $studentIds;
+
+        return array_values(array_filter(
+            $this->summary["$topicId|$subjectId"] ?? [],
+            static fn (SummaryAnswer $a): bool => in_array($a->studentId, $studentIds, true),
+        ));
     }
 }
