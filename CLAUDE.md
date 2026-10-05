@@ -162,7 +162,8 @@ needs a fact that only the other owns, the contract lives in
   name, username) does this classroom have?" `Identity` owns classrooms and
   implements it (`EloquentClassroomRoster`); bound in
   `IdentityServiceProvider`. `Quiz` depends on it to show a classroom's
-  progress to its teachers.
+  progress to its teachers, and (`forSubject`) to summarise a topic's
+  questions across every classroom of a subject.
 
 These interfaces live in `Shared`, not in the module that happens to consume
 them, because a future module (`Quiz`, `Scoring`) will need the same facts

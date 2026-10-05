@@ -12,4 +12,11 @@ interface ClassroomRoster
 {
     /** Null when no classroom has this id. Deactivated classrooms are returned (active: false). */
     public function find(string $classroomId): ?RosterClassroom;
+
+    /**
+     * Every classroom of the subject, active or not, by name; empty for an unknown subject.
+     *
+     * @return list<RosterClassroom>
+     */
+    public function forSubject(string $subjectId): array;
 }

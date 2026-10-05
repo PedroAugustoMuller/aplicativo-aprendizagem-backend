@@ -8,6 +8,7 @@ use App\Shared\Domain\Contract\ClassroomRoster;
 use App\Shared\Domain\Contract\RosterClassroom;
 use App\Shared\Domain\Contract\RosterStudent;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
 /** Implements Shared's ClassroomRoster on Identity's own tables, so Quiz never imports Identity. */
@@ -15,40 +16,60 @@ final class EloquentClassroomRoster implements ClassroomRoster
 {
     public function find(string $classroomId): ?RosterClassroom
     {
-        $classroom = DB::table('classrooms')->where('id', $classroomId)->first(['id', 'subject_id', 'deactivated_at']);
+        return $this->load(DB::table('classrooms')->where('id', $classroomId))[0] ?? null;
+    }
 
-        if ($classroom === null) {
-            return null;
+    public function forSubject(string $subjectId): array
+    {
+        return $this->load(DB::table('classrooms')->where('subject_id', $subjectId)->orderBy('name')->orderBy('id'));
+    }
+
+    /**
+     * Three queries however many classrooms: the classrooms, their teachers, their students.
+     *
+     * @return list<RosterClassroom>
+     */
+    private function load(Builder $classrooms): array
+    {
+        $rows = $classrooms->get(['id', 'subject_id', 'deactivated_at']);
+
+        if ($rows->isEmpty()) {
+            return [];
         }
 
+        $ids = $rows->map(static fn (object $row): string => EloquentAttribute::string($row->id ?? null, 'classrooms.id'))->all();
         $teacherIds = [];
 
-        foreach (DB::table('classroom_teachers')->where('classroom_id', $classroomId)->pluck('user_id') as $id) {
-            $teacherIds[] = EloquentAttribute::string($id, 'classroom_teachers.user_id');
+        foreach (DB::table('classroom_teachers')->whereIn('classroom_id', $ids)->orderBy('user_id')->get(['classroom_id', 'user_id']) as $row) {
+            $teacherIds[EloquentAttribute::string($row->classroom_id, 'classroom_teachers.classroom_id')][] = EloquentAttribute::string($row->user_id, 'classroom_teachers.user_id');
         }
 
         $students = [];
 
-        $rows = DB::table('classroom_students')
+        $enrolled = DB::table('classroom_students')
             ->join('users', 'users.id', '=', 'classroom_students.user_id')
-            ->where('classroom_students.classroom_id', $classroomId)
+            ->whereIn('classroom_students.classroom_id', $ids)
             ->orderBy('users.name')
-            ->get(['users.id', 'users.name', 'users.username']);
+            ->get(['classroom_students.classroom_id', 'users.id', 'users.name', 'users.username']);
 
-        foreach ($rows as $row) {
-            $students[] = new RosterStudent(
+        foreach ($enrolled as $row) {
+            $students[EloquentAttribute::string($row->classroom_id, 'classroom_students.classroom_id')][] = new RosterStudent(
                 EloquentAttribute::string($row->id, 'users.id'),
                 EloquentAttribute::string($row->name, 'users.name'),
                 EloquentAttribute::string($row->username, 'users.username'),
             );
         }
 
-        return new RosterClassroom(
-            EloquentAttribute::string($classroom->id, 'classrooms.id'),
-            EloquentAttribute::string($classroom->subject_id, 'classrooms.subject_id'),
-            $classroom->deactivated_at === null,
-            $teacherIds,
-            $students,
-        );
+        return array_values($rows->map(static function (object $row) use ($teacherIds, $students): RosterClassroom {
+            $id = EloquentAttribute::string($row->id ?? null, 'classrooms.id');
+
+            return new RosterClassroom(
+                $id,
+                EloquentAttribute::string($row->subject_id ?? null, 'classrooms.subject_id'),
+                ($row->deactivated_at ?? null) === null,
+                $teacherIds[$id] ?? [],
+                $students[$id] ?? [],
+            );
+        })->all());
     }
 }
