@@ -55,8 +55,8 @@ final class DevelopmentSeedTest extends TestCase
         self::assertSame(11, DB::table('questions')->where('topic_id', $periodicTable)->count());
         self::assertSame(1, DB::table('classrooms')->count());
         self::assertSame(1, DB::table('pending_credentials')->count());
-        self::assertSame(2, DB::table('quiz_attempts')->count());
-        self::assertSame(20, DB::table('quiz_attempt_questions')->count());
+        self::assertSame(3, DB::table('quiz_attempts')->count());
+        self::assertSame(30, DB::table('quiz_attempt_questions')->count());
     }
 
     public function test_carla_has_two_finished_quizzes_in_the_periodic_table(): void
@@ -75,6 +75,25 @@ final class DevelopmentSeedTest extends TestCase
             ->assertJsonPath('data.attempts.0.points_change', 40)
             ->assertJsonPath('data.attempts.1.points_change', 60)
             ->assertJsonCount(2, 'data.attempts');
+    }
+
+    public function test_the_classroom_question_summary_mixes_carla_and_diego(): void
+    {
+        $this->seed();
+
+        $topicId = DB::table('topics')->where('name', 'Tabela Periódica')->value('id');
+        self::assertIsString($topicId);
+        self::assertSame(1, DB::table('quiz_attempts')->where('student_id', '0192f0a0-0000-7000-8000-000000000013')->whereNotNull('completed_at')->count());
+
+        $questions = $this->withHeader('Authorization', 'Bearer '.$this->tokenFor('ana@escola.br', 'password'))
+            ->getJson("/api/v1/classrooms/0192f0a0-0000-7000-8000-000000000021/topics/$topicId/question-summary")
+            ->assertOk()
+            ->assertJsonPath('data.students', 2)
+            ->json('data.questions');
+        self::assertIsArray($questions);
+        $percents = array_column($questions, 'wrong_percent');
+        self::assertContains(50, $percents);
+        self::assertContains(2, array_column($questions, 'answered'));
     }
 
     public function test_diego_logs_in_with_the_reissued_temporary_password_and_must_change_it(): void

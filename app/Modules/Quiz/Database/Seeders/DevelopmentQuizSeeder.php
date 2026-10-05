@@ -18,18 +18,22 @@ use Illuminate\Support\Facades\DB;
 /**
  * Two finished quizzes for Carla in "Tabela Periódica", so the progress screens are
  * not empty in development: +60 then +40 → 100 points, Bronze, a few wrong answers.
+ * One for Diego in the same classroom, so the per-question summary is not only 0% or 100%.
  * Local/testing only; skips attempts that already exist, so re-running changes nothing.
  * Runs after ChemistryQuestionsSeeder (the bank) and DevelopmentAccountsSeeder (Carla).
  */
 final class DevelopmentQuizSeeder extends Seeder
 {
-    /** Repeats DevelopmentAccountsSeeder::CARLA_ID: Quiz may not import Identity. */
+    /** Repeat DevelopmentAccountsSeeder's ids: Quiz may not import Identity. */
     private const CARLA_ID = '0192f0a0-0000-7000-8000-000000000012';
 
-    /** @var array<string, array{int, list<bool>}> attempt id => [days ago, answers in position order] */
+    private const DIEGO_ID = '0192f0a0-0000-7000-8000-000000000013';
+
+    /** @var array<string, array{string, int, list<bool>}> attempt id => [student id, days ago, answers in position order] */
     private const ATTEMPTS = [
-        '0192f0a0-0000-7000-8000-000000000301' => [3, [true, true, true, true, true, true, true, true, false, false]],
-        '0192f0a0-0000-7000-8000-000000000302' => [2, [true, true, true, true, true, false, false, false, true, true]],
+        '0192f0a0-0000-7000-8000-000000000301' => [self::CARLA_ID, 3, [true, true, true, true, true, true, true, true, false, false]],
+        '0192f0a0-0000-7000-8000-000000000302' => [self::CARLA_ID, 2, [true, true, true, true, true, false, false, false, true, true]],
+        '0192f0a0-0000-7000-8000-000000000303' => [self::DIEGO_ID, 1, [false, false, true, true, false, true, true, false, true, true]],
     ];
 
     public function run(Application $app, QuestionBank $bank, AttemptRepository $attempts): void
@@ -48,7 +52,7 @@ final class DevelopmentQuizSeeder extends Seeder
 
         $questions = $bank->activeQuestions($topic->id);
 
-        foreach (self::ATTEMPTS as $id => [$daysAgo, $answers]) {
+        foreach (self::ATTEMPTS as $id => [$studentId, $daysAgo, $answers]) {
             $attemptId = new AttemptId($id);
 
             if ($attempts->findById($attemptId) !== null) {
@@ -56,7 +60,7 @@ final class DevelopmentQuizSeeder extends Seeder
             }
 
             $startedAt = (new DateTimeImmutable("-$daysAgo days"))->setTime(10, 0);
-            $attempt = Attempt::start($attemptId, self::CARLA_ID, $topic, $questions, new KeepOrder, $startedAt);
+            $attempt = Attempt::start($attemptId, $studentId, $topic, $questions, new KeepOrder, $startedAt);
             $attempts->add($attempt);
 
             foreach ($attempt->questions() as $position => $question) {
