@@ -39,8 +39,11 @@ fi
 echo "==> build and start"
 "${compose[@]}" build --pull
 "${compose[@]}" up -d --remove-orphans
-# nginx keeps its old config on `up` when only a mounted file changed.
-"${compose[@]}" exec -T nginx nginx -s reload
+# nginx's config and Cloudflare list are single-file bind mounts, pinned to the
+# inode that existed when the container started; git pull and cloudflare-ips.sh
+# replace those files (new inode), so a reload would re-read the OLD content.
+# A restart re-mounts them (and re-resolves app's address).
+"${compose[@]}" restart nginx
 
 echo "==> migrate"
 "${compose[@]}" exec -T -u www-data app php artisan migrate --force
