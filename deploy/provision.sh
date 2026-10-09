@@ -13,9 +13,12 @@ log() { printf '\n==> %s\n' "$*"; }
 
 log "packages"
 export DEBIAN_FRONTEND=noninteractive
+# Run over ssh with no terminal: a changed config file must not stop dpkg to
+# ask. Keep the image's version unless the package's default is untouched.
+apt_opts=(-yq -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 apt-get update -q
-apt-get upgrade -yq
-apt-get install -yq ufw fail2ban unattended-upgrades ca-certificates curl git
+apt-get upgrade "${apt_opts[@]}"
+apt-get install "${apt_opts[@]}" ufw fail2ban unattended-upgrades ca-certificates curl git
 
 log "user deploy"
 if ! id deploy >/dev/null 2>&1; then
@@ -47,7 +50,7 @@ log "firewall"
 # that fight ufw and Docker. Drop the package and its rules before ufw and
 # Docker install their own; skipped once the package is gone.
 if dpkg -s iptables-persistent >/dev/null 2>&1; then
-    apt-get purge -yq iptables-persistent netfilter-persistent
+    apt-get purge "${apt_opts[@]}" iptables-persistent netfilter-persistent
     iptables -P INPUT ACCEPT
     iptables -P FORWARD ACCEPT
     iptables -F INPUT
@@ -88,7 +91,7 @@ if ! command -v docker >/dev/null 2>&1; then
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
         > /etc/apt/sources.list.d/docker.list
     apt-get update -q
-    apt-get install -yq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    apt-get install "${apt_opts[@]}" docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
 usermod -aG docker deploy
 systemctl enable --now docker
