@@ -11,7 +11,7 @@ use RuntimeException;
 
 final class SanctumTokenIssuer implements TokenIssuer
 {
-    private const TOKEN_LIFETIME_DAYS = 7;
+    private const TOKEN_LIFETIME_DAYS = 30;
 
     public function issue(UserId $userId): string
     {

@@ -111,7 +111,7 @@ final class LoginTest extends TestCase
             ->getJson('/api/v1/auth/me')
             ->assertOk();
 
-        $this->travel(8)->days();
+        $this->travel(31)->days();
 
         // See the comment in test_logout_revokes_the_token(): Laravel's TestCase
         // reuses one Application across the simulated requests in a single test
