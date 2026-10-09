@@ -398,20 +398,11 @@ recognize — a bare `\RuntimeException`, a bug — becomes
 and stack trace go to the log, never to the response, regardless of
 `APP_DEBUG`.
 
-**Known gap:** `TrustProxies` is not configured anywhere in this repository,
-and that is a deployment requirement, not an oversight to fix here. With no
-trusted proxy, `$request->ip()` returns the raw `REMOTE_ADDR` — the socket
-peer. The planned production topology is Cloudflare → nginx → Laravel, so in
-production `REMOTE_ADDR` on every request is an nginx-local address or, if
-nginx doesn't rewrite it, a Cloudflare edge IP shared by many unrelated
-visitors. The unauthenticated rate limiter (`AppServiceProvider::boot()`,
-`RateLimiter::for('api', ...)`) keys by `$request->ip()` when there is no
-authenticated user, so every anonymous caller behind the same edge node
-would share one bucket — one student refreshing quickly could throttle the
-rest of the class. Before this goes live: nginx must set
-`X-Forwarded-For`/`X-Forwarded-Proto` from the real client, and Laravel's
-`bootstrap/app.php` must register a `TrustProxies` middleware (or
-`Request::setTrustedProxies`) that trusts nginx and reads those headers.
+**Real client IP:** Laravel trusts no proxy. In production nginx rewrites
+`REMOTE_ADDR` from `CF-Connecting-IP`, trusting that header only from
+Cloudflare's ranges (`docker/nginx/prod.conf`, `cloudflare-ips.conf`), so the
+rate limiters key on the real client without `TrustProxies` — and a
+client-sent `X-Forwarded-For` is ignored.
 
 **Fixed gap, worth knowing the mechanism of:** by default, Laravel's
 `Authenticate` middleware — when it decides a guest's request doesn't

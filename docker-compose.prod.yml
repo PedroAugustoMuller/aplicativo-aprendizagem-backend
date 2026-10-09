@@ -1,0 +1,87 @@
+# Production stack for the Oracle VM. Standalone (not an override of
+# docker-compose.yml): docker compose -f docker-compose.prod.yml <cmd>.
+# Variables come from .env next to this file (see .env.production.example).
+# Only nginx publishes a port; Postgres and Redis are reachable only inside
+# the network.
+name: quimica-prod
+
+x-app: &app
+  build:
+    context: .
+    target: production
+  image: quimica-api:production
+  restart: unless-stopped
+  env_file: .env
+  volumes:
+    - storage:/var/www/html/storage
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks: [quimica]
+
+services:
+  nginx:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./docker/nginx/prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${CLOUDFLARE_IPS_FILE:-./docker/nginx/cloudflare-ips.conf}:/etc/nginx/cloudflare-ips.conf:ro
+      - ${CERTS_DIR:?set CERTS_DIR in .env}:/etc/nginx/certs:ro
+    depends_on:
+      - app
+    networks: [quimica]
+
+  app:
+    <<: *app
+
+  # Same image; runs the schedule (pruning expired tokens). As www-data and
+  # without the entrypoint, so it never writes root-owned files to storage.
+  scheduler:
+    <<: *app
+    user: www-data
+    entrypoint: []
+    command: ["php", "artisan", "schedule:work"]
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE:?}
+      POSTGRES_USER: ${DB_USERNAME:?}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [quimica]
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [quimica]
+
+volumes:
+  storage:
+  postgres_data:
+  redis_data:
+
+networks:
+  quimica:
+    driver: bridge

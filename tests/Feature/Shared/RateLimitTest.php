@@ -114,4 +114,25 @@ final class RateLimitTest extends TestCase
             ->getJson('/api/v1/subjects')
             ->assertOk();
     }
+
+    /**
+     * Laravel trusts no proxy: nginx resolves the real client IP from
+     * CF-Connecting-IP (docker/nginx/prod.conf) and hands it over as
+     * REMOTE_ADDR. A client-sent X-Forwarded-For must therefore never buy a
+     * fresh bucket. Enabling TrustProxies with `at: '*'` makes this fail.
+     */
+    public function test_a_spoofed_forwarded_for_header_does_not_dodge_the_login_limit(): void
+    {
+        $this->seed(DevelopmentAccountsSeeder::class);
+
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $this->withHeader('X-Forwarded-For', "203.0.113.{$attempt}")
+                ->postJson('/api/v1/auth/login', ['login' => 'ana@escola.br', 'password' => 'wrong'])
+                ->assertStatus(401);
+        }
+
+        $this->withHeader('X-Forwarded-For', '203.0.113.99')
+            ->postJson('/api/v1/auth/login', ['login' => 'ana@escola.br', 'password' => 'wrong'])
+            ->assertStatus(429);
+    }
 }
