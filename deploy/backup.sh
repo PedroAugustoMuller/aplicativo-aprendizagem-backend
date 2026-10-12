@@ -20,5 +20,7 @@ docker compose exec -T postgres \
 mv "${file}.partial" "$file"
 
 find "$dir" -name 'quimica-*.sql.gz' -mtime +13 -delete
+# A dump that died halfway leaves its .partial behind.
+find "$dir" -name 'quimica-*.sql.gz.partial' -mtime +0 -delete
 
 echo "$(date -Iseconds) backup ok: ${file} ($(du -h "$file" | cut -f1))"

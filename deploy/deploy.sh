@@ -61,6 +61,13 @@ if [ "$status" != "200" ]; then
     exit 1
 fi
 
+echo "==> prune"
+# Each build orphans the previous app image and leaves build cache behind.
+# Only dangling images go (never one a container uses); recent cache stays so
+# the next build is fast. A failed prune must not fail a healthy deploy.
+docker image prune -f || echo "warning: image prune failed" >&2
+docker builder prune -f --filter until=168h || echo "warning: build cache prune failed" >&2
+
 echo "==> backup cron"
 line="0 3 * * * $(pwd)/deploy/backup.sh >> /home/deploy/backups/backup.log 2>&1"
 ( crontab -l 2>/dev/null | grep -v 'deploy/backup.sh' || true; echo "$line" ) | crontab -

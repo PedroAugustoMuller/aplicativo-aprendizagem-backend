@@ -5,6 +5,13 @@
 # the network.
 name: quimica-prod
 
+# Docker's default json-file driver never rotates; cap every service at 30 MB.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-app: &app
   build:
     context: .
@@ -19,12 +26,14 @@ x-app: &app
       condition: service_healthy
     redis:
       condition: service_healthy
+  logging: *logging
   networks: [quimica]
 
 services:
   nginx:
     image: nginx:1.29-alpine
     restart: unless-stopped
+    logging: *logging
     ports:
       - "${HTTPS_PORT:-443}:443"
     volumes:
@@ -49,6 +58,7 @@ services:
   postgres:
     image: postgres:18-alpine
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: ${DB_DATABASE:?}
       POSTGRES_USER: ${DB_USERNAME:?}
@@ -67,6 +77,7 @@ services:
   redis:
     image: redis:8-alpine
     restart: unless-stopped
+    logging: *logging
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
