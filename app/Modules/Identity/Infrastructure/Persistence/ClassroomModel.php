@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Model;
  *
  * @property string $id
  * @property string $name
- * @property string $subject_id
  * @property \DateTimeImmutable|null $deactivated_at
  */
 final class ClassroomModel extends Model

@@ -39,6 +39,8 @@ final class DevelopmentAccountsSeeder extends Seeder
 
     private const CHEMISTRY_1_CLASSROOM_ID = '0192f0a0-0000-7000-8000-000000000021';
 
+    private const BRUNO_CHEMISTRY_1_ASSIGNMENT_ID = '0192f0a0-0000-7000-8000-000000000031';
+
     private const DIEGO_TEMPORARY_PASSWORD = 'Temp2345';
 
     /**
@@ -61,16 +63,14 @@ final class DevelopmentAccountsSeeder extends Seeder
 
         DB::table('classrooms')->updateOrInsert(
             ['id' => self::CHEMISTRY_1_CLASSROOM_ID],
-            [
-                'name' => 'Química 1',
-                'subject_id' => self::CHEMISTRY_SUBJECT_ID,
-                'deactivated_at' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
+            ['name' => 'Química 1', 'deactivated_at' => null, 'created_at' => now(), 'updated_at' => now()],
         );
-
-        DB::table('classroom_teachers')->insertOrIgnore(['classroom_id' => self::CHEMISTRY_1_CLASSROOM_ID, 'user_id' => $brunoId]);
+        DB::table('classroom_subjects')->insertOrIgnore(['classroom_id' => self::CHEMISTRY_1_CLASSROOM_ID, 'subject_id' => self::CHEMISTRY_SUBJECT_ID]);
+        // Bruno teaches Química there (a subject assignment), the e2e suite's contract.
+        DB::table('classroom_teachers')->insertOrIgnore([
+            'id' => self::BRUNO_CHEMISTRY_1_ASSIGNMENT_ID, 'classroom_id' => self::CHEMISTRY_1_CLASSROOM_ID,
+            'user_id' => $brunoId, 'subject_id' => self::CHEMISTRY_SUBJECT_ID,
+        ]);
         DB::table('classroom_students')->insertOrIgnore(['classroom_id' => self::CHEMISTRY_1_CLASSROOM_ID, 'user_id' => $carlaId]);
         DB::table('classroom_students')->insertOrIgnore(['classroom_id' => self::CHEMISTRY_1_CLASSROOM_ID, 'user_id' => $diegoId]);
 

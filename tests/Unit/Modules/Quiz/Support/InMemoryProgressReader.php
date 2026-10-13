@@ -35,16 +35,17 @@ final class InMemoryProgressReader implements ProgressReader
      * @template T
      *
      * @param  array<string, list<T>>  $rows
+     * @param  list<string>|null  $subjects
      * @return list<T>
      */
-    private static function pick(array $rows, string $student, string $topic, ?string $subject): array
+    private static function pick(array $rows, string $student, string $topic, ?array $subjects): array
     {
         $found = [];
 
         foreach ($rows as $key => $list) {
             [$s, $t, $sub] = explode('|', $key);
 
-            if ($s === $student && $t === $topic && ($subject === null || $subject === $sub)) {
+            if ($s === $student && $t === $topic && ($subjects === null || in_array($sub, $subjects, true))) {
                 $found = [...$found, ...$list];
             }
         }
@@ -52,11 +53,11 @@ final class InMemoryProgressReader implements ProgressReader
         return $found;
     }
 
-    public function answersForTopic(string $studentId, string $topicId, ?string $subjectId): array
+    public function answersForTopic(string $studentId, string $topicId, ?array $subjectIds): array
     {
         $this->calls[] = 'answersForTopic';
 
-        return self::pick($this->answers, $studentId, $topicId, $subjectId);
+        return self::pick($this->answers, $studentId, $topicId, $subjectIds);
     }
 
     public function answersBySubject(string $studentId, string $subjectId): array
@@ -91,14 +92,14 @@ final class InMemoryProgressReader implements ProgressReader
         return $grouped;
     }
 
-    public function attemptsForTopic(string $studentId, string $topicId, ?string $subjectId): array
+    public function attemptsForTopic(string $studentId, string $topicId, ?array $subjectIds): array
     {
-        return self::pick($this->attempts, $studentId, $topicId, $subjectId);
+        return self::pick($this->attempts, $studentId, $topicId, $subjectIds);
     }
 
-    public function answeredQuestions(string $studentId, string $topicId, ?string $subjectId): array
+    public function answeredQuestions(string $studentId, string $topicId, ?array $subjectIds): array
     {
-        return self::pick($this->questions, $studentId, $topicId, $subjectId);
+        return self::pick($this->questions, $studentId, $topicId, $subjectIds);
     }
 
     public function summaryAnswers(array $studentIds, string $topicId, string $subjectId): array

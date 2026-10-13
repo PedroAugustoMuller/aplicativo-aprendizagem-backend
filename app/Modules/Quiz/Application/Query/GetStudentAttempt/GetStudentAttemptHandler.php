@@ -24,7 +24,7 @@ final readonly class GetStudentAttemptHandler
         $scope = $this->access->scopeFor($query->actor, $query->classroomId, $query->studentId);
         $attempt = $this->attempts->findById(new AttemptId($query->attemptId));
 
-        if ($attempt === null || ! $attempt->isOwnedBy($scope->studentId) || $attempt->subjectId() !== $scope->subjectId || ! $attempt->isCompleted()) {
+        if ($attempt === null || ! $attempt->isOwnedBy($scope->studentId) || ! $scope->covers($attempt->subjectId()) || ! $attempt->isCompleted()) {
             throw new AttemptNotFoundException;
         }
 

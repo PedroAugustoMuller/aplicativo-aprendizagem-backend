@@ -53,6 +53,7 @@ final class AuthorizationMatrixTest extends TestCase
         yield 'create classroom' => ['POST', '/classrooms', self::row(401, 403, 403, 403, 201)];
         yield 'update classroom' => ['PATCH', '/classrooms/{classroom}', self::row(401, 403, 403, 403, 200)];
         yield 'assign teachers' => ['PUT', '/classrooms/{classroom}/teachers', self::row(401, 403, 403, 403, 200)];
+        yield 'replace classroom subjects' => ['PUT', '/classrooms/{classroom}/subjects', self::row(401, 403, 403, 403, 200)];
         yield 'deactivate classroom' => ['POST', '/classrooms/{classroom}/deactivate', self::row(401, 403, 403, 403, 200)];
         yield 'list students' => ['GET', '/classrooms/{classroom}/students', self::row(401, 403, 403, 200, 200)];
         yield 'create students' => ['POST', '/classrooms/{classroom}/students', self::row(401, 403, 403, 201, 201)];
@@ -70,7 +71,7 @@ final class AuthorizationMatrixTest extends TestCase
         yield 'subject quiz progress' => ['GET', '/subjects/{subject}/quiz-progress', self::row(401, 200, 403, 403, 403)];
         yield 'topic quiz history' => ['GET', '/topics/{topic}/quiz-history', self::row(401, 200, 403, 403, 403)];
         yield 'topic wrong questions' => ['GET', '/topics/{topic}/wrong-questions', self::row(401, 200, 403, 403, 403)];
-        yield 'classroom quiz progress' => ['GET', '/classrooms/{classroom}/quiz-progress', self::row(401, 403, 403, 200, 200)];
+        yield 'classroom quiz progress' => ['GET', '/classrooms/{classroom}/subjects/{subject}/quiz-progress', self::row(401, 403, 403, 200, 200)];
         yield 'student topic history' => ['GET', '/classrooms/{classroom}/students/{student}/topics/{topic}/quiz-history', self::row(401, 403, 403, 200, 200)];
         yield 'student wrong questions' => ['GET', '/classrooms/{classroom}/students/{student}/topics/{topic}/wrong-questions', self::row(401, 403, 403, 200, 200)];
         yield 'classroom question summary' => ['GET', '/classrooms/{classroom}/topics/{topic}/question-summary', self::row(401, 403, 403, 200, 200)];
@@ -196,9 +197,10 @@ final class AuthorizationMatrixTest extends TestCase
             '/subjects' => ['id' => (string) Str::uuid(), 'name' => 'Física '.uniqid()],
             '/subjects/{subject}' => ['name' => 'Física '.uniqid()],
             '/teachers' => ['id' => (string) Str::uuid(), 'name' => 'Novo Professor', 'email' => uniqid().'@escola.br'],
-            '/classrooms' => ['id' => (string) Str::uuid(), 'name' => 'Turma '.uniqid(), 'subject_id' => $world['subjectId']],
-            '/classrooms/{classroom}' => ['name' => 'Química 1', 'subject_id' => $world['subjectId']],
-            '/classrooms/{classroom}/teachers' => ['teacher_ids' => [$world['teacherId']]],
+            '/classrooms' => ['id' => (string) Str::uuid(), 'name' => 'Turma '.uniqid(), 'subject_ids' => [$world['subjectId']]],
+            '/classrooms/{classroom}' => ['name' => 'Química 1'],
+            '/classrooms/{classroom}/teachers' => ['assignments' => [['teacher_id' => $world['teacherId'], 'subject_id' => $world['subjectId']]]],
+            '/classrooms/{classroom}/subjects' => ['subject_ids' => [$world['subjectId']]],
             '/classrooms/{classroom}/students' => ['students' => [['id' => (string) Str::uuid(), 'name' => 'Nova Aluna']]],
             '/subjects/{subject}/topics' => ['id' => (string) Str::uuid(), 'name' => 'Conteúdo '.uniqid(), 'description' => ''],
             '/topics/{topic}' => ['name' => 'Conteúdo '.uniqid()],

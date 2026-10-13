@@ -196,6 +196,32 @@ final class TopicAuthoringTest extends TestCase
         return $this->withHeader('Authorization', 'Bearer '.$this->teacherToken);
     }
 
+    public function test_a_whole_classroom_teacher_covers_a_subject_added_later(): void
+    {
+        $admin = $this->tokenFor($this->makeUser('admin'));
+        $port = $this->makeSubject('Português');
+        $ana = $this->makeUser('teacher', 'Ana');
+        $id = $this->makeClassroomWith([$this->subjectId], [[$ana, null]], name: '7º A');
+
+        $this->withToken($admin)->putJson("/api/v1/classrooms/$id/subjects", ['subject_ids' => [$this->subjectId, $port]])->assertOk();
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($this->tokenFor($ana))
+            ->postJson("/api/v1/subjects/$port/topics", ['id' => (string) Str::uuid(), 'name' => 'Crase', 'description' => ''])
+            ->assertCreated();
+    }
+
+    public function test_a_subject_teacher_cannot_author_another_subject_of_the_classroom(): void
+    {
+        $port = $this->makeSubject('Português');
+        $carlos = $this->makeUser('teacher', 'Carlos');
+        $this->makeClassroomWith([$this->subjectId, $port], [[$carlos, $this->subjectId]], name: '7º A');
+
+        $this->withToken($this->tokenFor($carlos))
+            ->postJson("/api/v1/subjects/$port/topics", ['id' => (string) Str::uuid(), 'name' => 'Crase', 'description' => ''])
+            ->assertForbidden();
+    }
+
     private function topicsUrl(): string
     {
         return '/api/v1/subjects/'.$this->subjectId.'/topics';

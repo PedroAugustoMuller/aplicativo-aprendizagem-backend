@@ -30,27 +30,42 @@ final readonly class CreateClassroomHandler
 
         $id = new ClassroomId($command->id);
         $name = new ClassroomName($command->name);
+        $subjectIds = array_values(array_unique($command->subjectIds));
         $existing = $this->classrooms->findById($id);
 
         if ($existing !== null) {
-            if ($existing->name()->value() !== $name->value() || $existing->subjectId() !== $command->subjectId) {
+            if ($existing->name()->value() !== $name->value() || ! self::sameSet($existing->subjectIds(), $subjectIds)) {
                 throw new IdempotencyConflictException;
             }
 
             return ClassroomView::of($existing);
         }
 
-        if (! $this->subjects->isActiveSubject($command->subjectId)) {
-            throw new ClassroomSubjectInactiveException;
+        foreach ($subjectIds as $subjectId) {
+            if (! $this->subjects->isActiveSubject($subjectId)) {
+                throw new ClassroomSubjectInactiveException;
+            }
         }
 
         if ($this->classrooms->nameTakenByAnother($name, $id)) {
             throw new ClassroomNameAlreadyTakenException($name->value());
         }
 
-        $classroom = Classroom::create($id, $name, $command->subjectId);
+        $classroom = Classroom::create($id, $name, $subjectIds);
         $this->classrooms->save($classroom);
 
         return ClassroomView::of($classroom);
+    }
+
+    /**
+     * @param  list<string>  $a
+     * @param  list<string>  $b
+     */
+    private static function sameSet(array $a, array $b): bool
+    {
+        sort($a);
+        sort($b);
+
+        return $a === $b;
     }
 }

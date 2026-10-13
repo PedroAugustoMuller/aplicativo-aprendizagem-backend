@@ -18,7 +18,6 @@ final class UpdateClassroomRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:80'],
-            'subject_id' => ['required', 'uuid'],
         ];
     }
 }

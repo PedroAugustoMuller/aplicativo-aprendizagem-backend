@@ -6,6 +6,7 @@ namespace Tests\Feature\Support;
 
 use App\Modules\Identity\Domain\ValueObject\UserId;
 use App\Modules\Identity\Infrastructure\Persistence\UserModel;
+use App\Shared\Infrastructure\Persistence\EloquentAttribute;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -30,6 +31,11 @@ trait ActsAsUsers
         ]);
     }
 
+    protected function userId(UserModel $user): string
+    {
+        return EloquentAttribute::string($user->getKey(), 'users.id');
+    }
+
     protected function tokenFor(UserModel $user): string
     {
         return $user->createToken('api', ['*'], now()->addDay())->plainTextToken;
@@ -44,15 +50,31 @@ trait ActsAsUsers
     }
 
     /**
+     * One subject; every teacher is an assignment of that subject (the shape before
+     * classrooms held several subjects, which most tests still describe).
+     *
      * @param  list<UserModel>  $teachers
      * @param  list<UserModel>  $students
      */
     protected function makeClassroom(string $subjectId, array $teachers = [], array $students = [], string $name = 'Química 1'): string
     {
+        return $this->makeClassroomWith([$subjectId], array_map(static fn (UserModel $t): array => [$t, $subjectId], $teachers), $students, $name);
+    }
+
+    /**
+     * @param  list<string>  $subjectIds
+     * @param  list<array{0: UserModel, 1: ?string}>  $assignments  teacher and subject (null: whole classroom)
+     * @param  list<UserModel>  $students
+     */
+    protected function makeClassroomWith(array $subjectIds, array $assignments = [], array $students = [], string $name = 'Turma'): string
+    {
         $id = (string) Str::uuid7();
-        DB::table('classrooms')->insert(['id' => $id, 'name' => $name, 'subject_id' => $subjectId, 'created_at' => now(), 'updated_at' => now()]);
-        foreach ($teachers as $t) {
-            DB::table('classroom_teachers')->insert(['classroom_id' => $id, 'user_id' => $t->getKey()]);
+        DB::table('classrooms')->insert(['id' => $id, 'name' => $name, 'created_at' => now(), 'updated_at' => now()]);
+        foreach ($subjectIds as $subjectId) {
+            DB::table('classroom_subjects')->insert(['classroom_id' => $id, 'subject_id' => $subjectId]);
+        }
+        foreach ($assignments as [$teacher, $subjectId]) {
+            DB::table('classroom_teachers')->insert(['id' => (string) Str::uuid7(), 'classroom_id' => $id, 'user_id' => $teacher->getKey(), 'subject_id' => $subjectId]);
         }
         foreach ($students as $s) {
             DB::table('classroom_students')->insert(['classroom_id' => $id, 'user_id' => $s->getKey()]);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Infrastructure\Persistence;
 
+use App\Modules\Identity\Application\DTO\TeacherAssignmentView;
 use App\Modules\Identity\Application\Query\ListClassrooms\ClassroomListItem;
 use App\Modules\Identity\Application\Query\ListClassrooms\ClassroomListReader;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
@@ -48,7 +49,7 @@ final class EloquentClassroomListReader implements ClassroomListReader
     private function list(callable $scope): array
     {
         $query = $scope(ClassroomModel::query()
-            ->select(['classrooms.id', 'classrooms.name', 'classrooms.subject_id', 'classrooms.deactivated_at'])
+            ->select(['classrooms.id', 'classrooms.name', 'classrooms.deactivated_at'])
             ->selectSub(
                 DB::table('classroom_students')
                     ->selectRaw('count(*)')
@@ -59,7 +60,9 @@ final class EloquentClassroomListReader implements ClassroomListReader
 
         $models = $query->get();
 
-        $teacherIdsByClassroom = $this->teacherIdsByClassroom(array_values($models->pluck('id')->all()));
+        $ids = array_values($models->pluck('id')->all());
+        $subjects = $this->subjectIdsByClassroom($ids);
+        $teachers = $this->assignmentsByClassroom($ids);
 
         $items = [];
         foreach ($models as $model) {
@@ -68,8 +71,8 @@ final class EloquentClassroomListReader implements ClassroomListReader
             $items[] = new ClassroomListItem(
                 id: $id,
                 name: EloquentAttribute::string($model->getAttribute('name'), 'classrooms.name'),
-                subjectId: EloquentAttribute::string($model->getAttribute('subject_id'), 'classrooms.subject_id'),
-                teacherIds: $teacherIdsByClassroom[$id] ?? [],
+                subjectIds: $subjects[$id] ?? [],
+                teachers: $teachers[$id] ?? [],
                 studentCount: EloquentAttribute::int($model->getAttribute('student_count'), 'classrooms.student_count'),
                 active: $model->getAttribute('deactivated_at') === null,
             );
@@ -82,22 +85,30 @@ final class EloquentClassroomListReader implements ClassroomListReader
      * @param  list<mixed>  $classroomIds
      * @return array<string, list<string>>
      */
-    private function teacherIdsByClassroom(array $classroomIds): array
+    private function subjectIdsByClassroom(array $classroomIds): array
     {
-        if ($classroomIds === []) {
-            return [];
+        $grouped = [];
+        foreach (DB::table('classroom_subjects')->whereIn('classroom_id', $classroomIds)->orderBy('subject_id')->get(['classroom_id', 'subject_id']) as $row) {
+            $grouped[EloquentAttribute::string($row->classroom_id, 'classroom_subjects.classroom_id')][] = EloquentAttribute::string($row->subject_id, 'classroom_subjects.subject_id');
         }
 
-        $rows = DB::table('classroom_teachers')
-            ->whereIn('classroom_id', $classroomIds)
-            ->get(['classroom_id', 'user_id']);
+        return $grouped;
+    }
 
+    /**
+     * @param  list<mixed>  $classroomIds
+     * @return array<string, list<TeacherAssignmentView>>
+     */
+    private function assignmentsByClassroom(array $classroomIds): array
+    {
         $grouped = [];
-        foreach ($rows->groupBy('classroom_id') as $classroomId => $teachersOfClassroom) {
-            $grouped[(string) $classroomId] = array_values($teachersOfClassroom
-                ->pluck('user_id')
-                ->map(fn (mixed $userId): string => EloquentAttribute::string($userId, 'classroom_teachers.user_id'))
-                ->all());
+        $rows = DB::table('classroom_teachers')->whereIn('classroom_id', $classroomIds)
+            ->orderBy('user_id')->orderBy('subject_id')->get(['classroom_id', 'user_id', 'subject_id']);
+        foreach ($rows as $row) {
+            $grouped[EloquentAttribute::string($row->classroom_id, 'classroom_teachers.classroom_id')][] = new TeacherAssignmentView(
+                EloquentAttribute::string($row->user_id, 'classroom_teachers.user_id'),
+                $row->subject_id === null ? null : EloquentAttribute::string($row->subject_id, 'classroom_teachers.subject_id'),
+            );
         }
 
         return $grouped;

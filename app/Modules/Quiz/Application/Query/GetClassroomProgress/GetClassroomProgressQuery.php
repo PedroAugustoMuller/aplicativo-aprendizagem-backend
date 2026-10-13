@@ -11,5 +11,6 @@ final readonly class GetClassroomProgressQuery
     public function __construct(
         public Actor $actor,
         public string $classroomId,
+        public string $subjectId,
     ) {}
 }

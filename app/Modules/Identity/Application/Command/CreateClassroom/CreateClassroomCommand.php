@@ -8,10 +8,11 @@ use App\Shared\Domain\Auth\Actor;
 
 final readonly class CreateClassroomCommand
 {
+    /** @param  list<string>  $subjectIds */
     public function __construct(
         public Actor $actor,
         public string $id,
         public string $name,
-        public string $subjectId,
+        public array $subjectIds,
     ) {}
 }

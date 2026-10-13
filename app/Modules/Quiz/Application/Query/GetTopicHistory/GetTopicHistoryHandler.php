@@ -18,7 +18,7 @@ final readonly class GetTopicHistoryHandler
     public function handle(GetTopicHistoryQuery $query): TopicHistoryView
     {
         $scope = $this->access->scopeFor($query->actor, $query->classroomId, $query->studentId);
-        $progress = Progress::fromAnswers($this->reader->answersForTopic($scope->studentId, $query->topicId, $scope->subjectId));
+        $progress = Progress::fromAnswers($this->reader->answersForTopic($scope->studentId, $query->topicId, $scope->subjectIds));
 
         return new TopicHistoryView(
             $progress->points,
@@ -26,7 +26,7 @@ final readonly class GetTopicHistoryHandler
             $progress->nextTier(),
             array_map(
                 static fn (AttemptSummaryRow $row): AttemptSummaryView => AttemptSummaryView::of($row, $progress->forAttempt($row->id)),
-                $this->reader->attemptsForTopic($scope->studentId, $query->topicId, $scope->subjectId),
+                $this->reader->attemptsForTopic($scope->studentId, $query->topicId, $scope->subjectIds),
             ),
         );
     }

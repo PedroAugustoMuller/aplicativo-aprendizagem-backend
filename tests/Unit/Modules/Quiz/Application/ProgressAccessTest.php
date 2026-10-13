@@ -10,6 +10,7 @@ use App\Modules\Quiz\Domain\Exception\QuizAccessDeniedException;
 use App\Modules\Quiz\Domain\Exception\StudentNotFoundException;
 use App\Shared\Domain\Auth\Actor;
 use App\Shared\Domain\Auth\Role;
+use App\Shared\Domain\Contract\RosterAssignment;
 use App\Shared\Domain\Contract\RosterClassroom;
 use App\Shared\Domain\Contract\RosterStudent;
 use PHPUnit\Framework\TestCase;
@@ -30,7 +31,7 @@ final class ProgressAccessTest extends TestCase
     protected function setUp(): void
     {
         $this->access = new ProgressAccess(new FixedRoster([
-            new RosterClassroom(self::CLASSROOM, self::SUBJECT, true, [self::TEACHER], [new RosterStudent(self::STUDENT, 'Carla', 'carla.dias')]),
+            new RosterClassroom(self::CLASSROOM, [self::SUBJECT], true, [new RosterAssignment(self::TEACHER, self::SUBJECT)], [new RosterStudent(self::STUDENT, 'Carla', 'carla.dias')]),
         ]));
     }
 
@@ -38,14 +39,14 @@ final class ProgressAccessTest extends TestCase
     {
         $scope = $this->access->scopeFor(new Actor(self::STUDENT, Role::Student), null, null);
 
-        self::assertSame([self::STUDENT, null], [$scope->studentId, $scope->subjectId]);
+        self::assertSame([self::STUDENT, null], [$scope->studentId, $scope->subjectIds]);
     }
 
     public function test_a_teacher_of_the_classroom_reads_a_student_within_its_subject(): void
     {
         $scope = $this->access->scopeFor(new Actor(self::TEACHER, Role::Teacher), self::CLASSROOM, self::STUDENT);
 
-        self::assertSame([self::STUDENT, self::SUBJECT], [$scope->studentId, $scope->subjectId]);
+        self::assertSame([self::STUDENT, [self::SUBJECT]], [$scope->studentId, $scope->subjectIds]);
     }
 
     public function test_an_admin_reads_any_classroom(): void
@@ -86,5 +87,28 @@ final class ProgressAccessTest extends TestCase
         $this->expectException(StudentNotFoundException::class);
 
         $this->access->scopeFor(new Actor(self::TEACHER, Role::Teacher), self::CLASSROOM, null);
+    }
+
+    public function test_a_subject_teacher_reads_only_their_subject_of_the_classroom(): void
+    {
+        $access = new ProgressAccess(new FixedRoster([
+            new RosterClassroom('c', ['mat', 'port'], true, [new RosterAssignment('carlos', 'mat'), new RosterAssignment('ana', null)], [new RosterStudent('bia', 'Bia', 'bia')]),
+        ]));
+        $carlos = new Actor('carlos', Role::Teacher);
+
+        self::assertSame('c', $access->classroomSubject($carlos, 'c', 'mat')->id);
+        self::assertSame(['mat'], $access->scopeFor($carlos, 'c', 'bia')->subjectIds);
+        self::assertSame(['mat', 'port'], $access->scopeFor(new Actor('ana', Role::Teacher), 'c', 'bia')->subjectIds);
+
+        $this->expectException(QuizAccessDeniedException::class);
+        $access->classroomSubject($carlos, 'c', 'port');
+    }
+
+    public function test_a_subject_outside_the_classroom_is_not_found_even_for_the_admin(): void
+    {
+        $access = new ProgressAccess(new FixedRoster([new RosterClassroom('c', ['mat'], true, [], [])]));
+
+        $this->expectException(ClassroomNotFoundException::class);
+        $access->classroomSubject(new Actor('root', Role::Admin), 'c', 'hist');
     }
 }

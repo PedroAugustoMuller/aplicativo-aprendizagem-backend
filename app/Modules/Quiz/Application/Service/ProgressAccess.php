@@ -47,9 +47,31 @@ final readonly class ProgressAccess
         return $classroom;
     }
 
+    /** One subject of a classroom: the admin, or a teacher who teaches that subject there. */
+    public function classroomSubject(Actor $actor, string $classroomId, string $subjectId): RosterClassroom
+    {
+        $classroom = $this->classroom($actor, $classroomId);
+
+        if (! $classroom->hasSubject($subjectId)) {
+            throw new ClassroomNotFoundException;
+        }
+
+        if (! $actor->isAdmin() && ! $classroom->teaches($actor->userId, $subjectId)) {
+            throw new QuizAccessDeniedException;
+        }
+
+        return $classroom;
+    }
+
+    /** @return list<string> the classroom's subjects the actor may read */
+    public function readableSubjects(Actor $actor, RosterClassroom $classroom): array
+    {
+        return $actor->isAdmin() ? $classroom->subjectIds : $classroom->subjectsTaughtBy($actor->userId);
+    }
+
     /**
-     * The students of every active classroom of the subject the actor may read, each once.
-     * A teacher who teaches none of them may not read the subject; an admin just sees nobody.
+     * The students of every active classroom holding the subject where the actor may read it, each once.
+     * A teacher who reads it in none of them may not read the subject; an admin just sees nobody.
      *
      * @return list<string>
      */
@@ -58,7 +80,7 @@ final readonly class ProgressAccess
         $this->staff($actor);
         $readable = array_filter(
             $this->roster->forSubject($subjectId),
-            static fn (RosterClassroom $c): bool => $c->active && ($actor->isAdmin() || $c->isTaughtBy($actor->userId)),
+            static fn (RosterClassroom $c): bool => $c->active && ($actor->isAdmin() || $c->teaches($actor->userId, $subjectId)),
         );
 
         if ($readable === [] && ! $actor->isAdmin()) {
@@ -78,7 +100,7 @@ final readonly class ProgressAccess
 
     /**
      * Without a classroom: the actor's own answers. With one: a student enrolled in it,
-     * seen only within the classroom's subject.
+     * seen only within the classroom's subjects the actor reads there.
      */
     public function scopeFor(Actor $actor, ?string $classroomId, ?string $studentId): ProgressScope
     {
@@ -93,6 +115,6 @@ final readonly class ProgressAccess
             throw new StudentNotFoundException;
         }
 
-        return new ProgressScope($student->id, $classroom->subjectId);
+        return new ProgressScope($student->id, $this->readableSubjects($actor, $classroom));
     }
 }

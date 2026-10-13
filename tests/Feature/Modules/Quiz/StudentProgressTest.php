@@ -194,4 +194,38 @@ final class StudentProgressTest extends TestCase
 
         return $ids;
     }
+
+    public function test_a_subject_teacher_learns_nothing_about_another_subject_of_the_classroom(): void
+    {
+        $mat = $this->makeSubject('Matemática');
+        $port = $this->makeSubject('Português');
+        $portTopic = $this->makeTopic($port, 'Crase');
+        $bia = $this->makeUser('student', 'Bia');
+        $carlos = $this->makeUser('teacher', 'Carlos');
+        $id = $this->makeClassroomWith([$mat, $port], [[$carlos, $mat]], [$bia], '7º A');
+        $attempt = $this->makeAnsweredAttempt($this->userId($bia), $portTopic, $port, [false], '2026-10-01 10:00:00');
+        $base = "/api/v1/classrooms/$id/students/{$this->userId($bia)}";
+        $token = $this->tokenFor($carlos);
+
+        $this->withToken($token)->getJson("$base/topics/$portTopic/quiz-history")->assertOk()->assertJsonCount(0, 'data.attempts');
+        $this->withToken($token)->getJson("$base/topics/$portTopic/wrong-questions")->assertOk()->assertJsonCount(0, 'data');
+        $this->withToken($token)->getJson("$base/quiz-attempts/{$attempt['attemptId']}")->assertNotFound();
+        $this->withToken($token)->getJson("/api/v1/classrooms/$id/topics/$portTopic/question-summary")->assertNotFound();
+    }
+
+    public function test_a_whole_classroom_teacher_reads_every_subject_of_the_student(): void
+    {
+        $mat = $this->makeSubject('Matemática');
+        $port = $this->makeSubject('Português');
+        $portTopic = $this->makeTopic($port, 'Crase');
+        $bia = $this->makeUser('student', 'Bia');
+        $ana = $this->makeUser('teacher', 'Ana');
+        $id = $this->makeClassroomWith([$mat, $port], [[$ana, null]], [$bia], '7º A');
+        $attempt = $this->makeAnsweredAttempt($this->userId($bia), $portTopic, $port, [false], '2026-10-01 10:00:00');
+        $base = "/api/v1/classrooms/$id/students/{$this->userId($bia)}";
+        $token = $this->tokenFor($ana);
+
+        $this->withToken($token)->getJson("$base/topics/$portTopic/quiz-history")->assertOk()->assertJsonCount(1, 'data.attempts');
+        $this->withToken($token)->getJson("$base/quiz-attempts/{$attempt['attemptId']}")->assertOk();
+    }
 }

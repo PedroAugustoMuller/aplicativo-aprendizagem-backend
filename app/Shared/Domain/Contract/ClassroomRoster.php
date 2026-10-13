@@ -14,7 +14,7 @@ interface ClassroomRoster
     public function find(string $classroomId): ?RosterClassroom;
 
     /**
-     * Every classroom of the subject, active or not, by name; empty for an unknown subject.
+     * Every classroom holding the subject, active or not, by name; empty for an unknown subject.
      *
      * @return list<RosterClassroom>
      */

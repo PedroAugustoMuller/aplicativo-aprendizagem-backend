@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration\Modules\Identity;
 
 use App\Shared\Domain\Contract\ClassroomRoster;
+use App\Shared\Domain\Contract\RosterAssignment;
 use App\Shared\Domain\Contract\RosterClassroom;
 use App\Shared\Domain\Contract\RosterStudent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -28,9 +29,9 @@ final class EloquentClassroomRosterTest extends TestCase
         $classroom = $this->app->make(ClassroomRoster::class)->find($id);
 
         self::assertNotNull($classroom);
-        self::assertSame($subject, $classroom->subjectId);
+        self::assertSame([$subject], $classroom->subjectIds);
         self::assertTrue($classroom->active);
-        self::assertSame([$teacher->getKey()], $classroom->teacherIds);
+        self::assertEquals([new RosterAssignment($this->userId($teacher), $subject)], $classroom->assignments);
         self::assertSame(['Ana', 'Zoe'], array_map(static fn (RosterStudent $s): string => $s->name, $classroom->students));
         self::assertSame($ana->getAttribute('username'), $classroom->students[0]->username);
     }
@@ -62,9 +63,9 @@ final class EloquentClassroomRosterTest extends TestCase
 
         self::assertSame([$first, $second], array_map(static fn (RosterClassroom $c): string => $c->id, $classrooms));
         self::assertSame([true, false], array_map(static fn (RosterClassroom $c): bool => $c->active, $classrooms));
-        self::assertSame([$chemistry, $chemistry], array_map(static fn (RosterClassroom $c): string => $c->subjectId, $classrooms));
-        self::assertSame([$teacher->getKey()], $classrooms[0]->teacherIds);
-        self::assertSame([], $classrooms[1]->teacherIds);
+        self::assertSame([[$chemistry], [$chemistry]], array_map(static fn (RosterClassroom $c): array => $c->subjectIds, $classrooms));
+        self::assertTrue($classrooms[0]->isTaughtBy($this->userId($teacher)));
+        self::assertSame([], $classrooms[1]->assignments);
         self::assertSame(['Ana', 'Carla'], array_map(static fn (RosterStudent $s): string => $s->name, $classrooms[0]->students));
         self::assertSame(['Carla'], array_map(static fn (RosterStudent $s): string => $s->name, $classrooms[1]->students));
         self::assertSame([], $roster->forSubject('0192f0a0-0000-7000-8000-00000000dead'));
@@ -92,5 +93,23 @@ final class EloquentClassroomRosterTest extends TestCase
         }
 
         self::assertSame($one, $count());
+    }
+
+    public function test_a_classroom_lists_its_subjects_and_assignments_and_belongs_to_each_subject(): void
+    {
+        $mat = $this->makeSubject('Matemática');
+        $port = $this->makeSubject('Português');
+        $ana = $this->makeUser('teacher', 'Ana');
+        $carlos = $this->makeUser('teacher', 'Carlos');
+        $id = $this->makeClassroomWith([$mat, $port], [[$ana, null], [$carlos, $mat]], name: '7º A');
+        $roster = $this->app->make(ClassroomRoster::class);
+
+        $classroom = $roster->find($id);
+        self::assertNotNull($classroom);
+        self::assertEqualsCanonicalizing([$mat, $port], $classroom->subjectIds);
+        self::assertTrue($classroom->teaches($this->userId($ana), $port));
+        self::assertFalse($classroom->teaches($this->userId($carlos), $port));
+        self::assertSame([$mat], $classroom->subjectsTaughtBy($this->userId($carlos)));
+        self::assertSame([$id], array_map(static fn (RosterClassroom $c): string => $c->id, $roster->forSubject($port)));
     }
 }

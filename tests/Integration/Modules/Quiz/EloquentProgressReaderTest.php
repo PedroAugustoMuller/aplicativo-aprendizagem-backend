@@ -61,8 +61,8 @@ final class EloquentProgressReaderTest extends TestCase
     {
         $this->makeAnsweredAttempt($this->studentId, $this->topicId, $this->subjectId, [true], '2026-10-01 10:00');
 
-        self::assertSame([], $this->reader->answersForTopic($this->studentId, $this->topicId, $this->makeSubject('Biologia')));
-        self::assertCount(1, $this->reader->answersForTopic($this->studentId, $this->topicId, $this->subjectId));
+        self::assertSame([], $this->reader->answersForTopic($this->studentId, $this->topicId, [$this->makeSubject('Biologia')]));
+        self::assertCount(1, $this->reader->answersForTopic($this->studentId, $this->topicId, [$this->subjectId]));
     }
 
     public function test_answers_by_subject_are_grouped_by_topic(): void
@@ -109,7 +109,7 @@ final class EloquentProgressReaderTest extends TestCase
         self::assertSame([3, 3, 2], [$rows[1]->total, $rows[1]->answered, $rows[1]->correct]);
         self::assertSame('2026-10-01T10:00:00+00:00', $rows[1]->startedAt);
         self::assertSame('2026-10-01T10:03:00+00:00', $rows[1]->completedAt);
-        self::assertSame([], $this->reader->attemptsForTopic($this->studentId, $this->topicId, $this->makeSubject('Biologia')));
+        self::assertSame([], $this->reader->attemptsForTopic($this->studentId, $this->topicId, [$this->makeSubject('Biologia')]));
     }
 
     public function test_answered_questions_skip_rows_whose_bank_question_was_deleted(): void

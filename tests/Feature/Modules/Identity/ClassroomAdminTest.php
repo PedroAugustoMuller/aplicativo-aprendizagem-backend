@@ -21,17 +21,17 @@ final class ClassroomAdminTest extends TestCase
         $id = (string) Str::uuid();
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/v1/classrooms', ['id' => $id, 'name' => 'Química 1', 'subject_id' => $subjectId])
+            ->postJson('/api/v1/classrooms', ['id' => $id, 'name' => 'Química 1', 'subject_ids' => [$subjectId]])
             ->assertStatus(201)
             ->assertJsonPath('data.id', $id)
             ->assertJsonPath('data.name', 'Química 1')
-            ->assertJsonPath('data.subject_id', $subjectId)
-            ->assertJsonPath('data.teacher_ids', [])
+            ->assertJsonPath('data.subject_ids', [$subjectId])
+            ->assertJsonPath('data.teachers', [])
             ->assertJsonPath('data.student_count', 0)
             ->assertJsonPath('data.active', true);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/v1/classrooms', ['id' => $id, 'name' => 'Química 1', 'subject_id' => $subjectId])
+            ->postJson('/api/v1/classrooms', ['id' => $id, 'name' => 'Química 1', 'subject_ids' => [$subjectId]])
             ->assertStatus(200)
             ->assertJsonPath('data.id', $id);
     }
@@ -41,23 +41,22 @@ final class ClassroomAdminTest extends TestCase
         $token = $this->tokenFor($this->makeUser('admin'));
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/v1/classrooms', ['id' => (string) Str::uuid(), 'name' => 'Química 1', 'subject_id' => (string) Str::uuid()])
+            ->postJson('/api/v1/classrooms', ['id' => (string) Str::uuid(), 'name' => 'Química 1', 'subject_ids' => [(string) Str::uuid()]])
             ->assertStatus(422)
             ->assertJsonPath('error.code', 'identity.classroom.subject_inactive');
     }
 
-    public function test_an_admin_renames_a_classroom_and_changes_its_subject(): void
+    public function test_an_admin_renames_a_classroom(): void
     {
         $subjectId = $this->makeSubject('Química');
-        $otherSubjectId = $this->makeSubject('Biologia');
         $token = $this->tokenFor($this->makeUser('admin'));
         $classroomId = $this->makeClassroom($subjectId);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->patchJson('/api/v1/classrooms/'.$classroomId, ['name' => 'Biologia 1', 'subject_id' => $otherSubjectId])
+            ->patchJson('/api/v1/classrooms/'.$classroomId, ['name' => 'Química A'])
             ->assertOk()
-            ->assertJsonPath('data.name', 'Biologia 1')
-            ->assertJsonPath('data.subject_id', $otherSubjectId);
+            ->assertJsonPath('data.name', 'Química A')
+            ->assertJsonPath('data.subject_ids', [$subjectId]);
     }
 
     public function test_a_teacher_sees_only_the_classroom_they_are_assigned_to(): void
@@ -69,9 +68,9 @@ final class ClassroomAdminTest extends TestCase
         $classroomId = $this->makeClassroom($subjectId);
 
         $this->withHeader('Authorization', 'Bearer '.$admin)
-            ->putJson('/api/v1/classrooms/'.$classroomId.'/teachers', ['teacher_ids' => [$teacher->getKey()]])
+            ->putJson('/api/v1/classrooms/'.$classroomId.'/teachers', ['assignments' => [['teacher_id' => $teacher->getKey(), 'subject_id' => null]]])
             ->assertOk()
-            ->assertJsonPath('data.teacher_ids', [$teacher->getKey()]);
+            ->assertJsonPath('data.teachers', [['teacher_id' => $teacher->getKey(), 'subject_id' => null]]);
 
         $this->app['auth']->forgetGuards();
 
@@ -119,7 +118,7 @@ final class ClassroomAdminTest extends TestCase
         $classroomId = $this->makeClassroom($subjectId);
 
         $this->withHeader('Authorization', 'Bearer '.$admin)
-            ->putJson('/api/v1/classrooms/'.$classroomId.'/teachers', ['teacher_ids' => [$student->getKey()]])
+            ->putJson('/api/v1/classrooms/'.$classroomId.'/teachers', ['assignments' => [['teacher_id' => $student->getKey(), 'subject_id' => null]]])
             ->assertStatus(404)
             ->assertJsonPath('error.code', 'identity.teacher_not_found');
     }
@@ -151,8 +150,97 @@ final class ClassroomAdminTest extends TestCase
         $token = $this->tokenFor($this->makeUser('teacher'));
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/v1/classrooms', ['id' => (string) Str::uuid(), 'name' => 'Química 1', 'subject_id' => $subjectId])
+            ->postJson('/api/v1/classrooms', ['id' => (string) Str::uuid(), 'name' => 'Química 1', 'subject_ids' => [$subjectId]])
             ->assertStatus(403)
             ->assertJsonPath('error.code', 'auth.forbidden');
+    }
+
+    public function test_an_admin_builds_a_classroom_with_several_subjects_and_mixed_assignments(): void
+    {
+        $token = $this->tokenFor($this->makeUser('admin'));
+        $mat = $this->makeSubject('Matemática');
+        $port = $this->makeSubject('Português');
+        $ana = $this->makeUser('teacher', 'Ana');
+        $carlos = $this->makeUser('teacher', 'Carlos');
+        $id = (string) Str::uuid();
+
+        $created = $this->withToken($token)
+            ->postJson('/api/v1/classrooms', ['id' => $id, 'name' => '7º A', 'subject_ids' => [$mat, $port]])
+            ->assertCreated();
+        self::assertEqualsCanonicalizing([$mat, $port], $created->json('data.subject_ids'));
+
+        $this->withToken($token)
+            ->putJson("/api/v1/classrooms/$id/teachers", ['assignments' => [
+                ['teacher_id' => $ana->getKey(), 'subject_id' => null],
+                ['teacher_id' => $carlos->getKey(), 'subject_id' => $mat],
+            ]])
+            ->assertOk()
+            ->assertJsonCount(2, 'data.teachers')
+            ->assertJsonFragment(['teacher_id' => $ana->getKey(), 'subject_id' => null])
+            ->assertJsonFragment(['teacher_id' => $carlos->getKey(), 'subject_id' => $mat]);
+    }
+
+    public function test_assignment_errors_are_reported(): void
+    {
+        $token = $this->tokenFor($this->makeUser('admin'));
+        $mat = $this->makeSubject('Matemática');
+        $other = $this->makeSubject('História');
+        $ana = $this->makeUser('teacher', 'Ana');
+        $id = $this->makeClassroomWith([$mat], name: '7º A');
+        $put = fn (array $rows) => $this->withToken($token)->putJson("/api/v1/classrooms/$id/teachers", ['assignments' => $rows]);
+
+        $put([['teacher_id' => $ana->getKey(), 'subject_id' => $other]])
+            ->assertStatus(422)->assertJsonPath('error.code', 'identity.classroom.subject_not_assigned');
+        $put([['teacher_id' => $ana->getKey(), 'subject_id' => null], ['teacher_id' => $ana->getKey(), 'subject_id' => $mat]])
+            ->assertStatus(422)->assertJsonPath('error.code', 'identity.classroom.teacher_assignment_redundant');
+        $put([['teacher_id' => $ana->getKey(), 'subject_id' => $mat], ['teacher_id' => $ana->getKey(), 'subject_id' => $mat]])
+            ->assertStatus(422)->assertJsonPath('error.code', 'validation.failed');
+    }
+
+    public function test_adding_an_inactive_subject_to_a_classroom_is_rejected(): void
+    {
+        $token = $this->tokenFor($this->makeUser('admin'));
+        $id = $this->makeClassroomWith([], name: '7º A');
+
+        $this->withToken($token)
+            ->putJson("/api/v1/classrooms/$id/subjects", ['subject_ids' => [(string) Str::uuid()]])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'identity.classroom.subject_inactive');
+    }
+
+    public function test_removing_a_subject_drops_its_assignments_and_the_access_they_gave(): void
+    {
+        $admin = $this->tokenFor($this->makeUser('admin'));
+        $mat = $this->makeSubject('Matemática');
+        $port = $this->makeSubject('Português');
+        $carlos = $this->makeUser('teacher', 'Carlos');
+        $bia = $this->makeUser('teacher', 'Bia');
+        $id = $this->makeClassroomWith([$mat, $port], [[$carlos, $mat], [$bia, $mat], [$bia, $port]], name: '7º A');
+
+        $this->withToken($admin)
+            ->putJson("/api/v1/classrooms/$id/subjects", ['subject_ids' => [$port]])
+            ->assertOk()
+            ->assertJsonPath('data.subject_ids', [$port])
+            ->assertJsonPath('data.teachers', [['teacher_id' => $bia->getKey(), 'subject_id' => $port]]);
+
+        // Carlos had only Matemática there: the classroom is gone from his list.
+        $this->app['auth']->forgetGuards();
+        $this->withToken($this->tokenFor($carlos))->getJson('/api/v1/classrooms')->assertOk()->assertJsonCount(0, 'data');
+
+        // Bia keeps the classroom, but no longer reads Matemática in it.
+        $this->app['auth']->forgetGuards();
+        $this->withToken($this->tokenFor($bia))->getJson("/api/v1/classrooms/$id/subjects/$mat/quiz-progress")->assertNotFound();
+    }
+
+    public function test_a_student_sees_no_teachers_in_their_classrooms(): void
+    {
+        $subjectId = $this->makeSubject();
+        $student = $this->makeUser('student');
+        $this->makeClassroom($subjectId, [$this->makeUser('teacher')], [$student]);
+
+        $this->withToken($this->tokenFor($student))->getJson('/api/v1/classrooms')
+            ->assertOk()
+            ->assertJsonPath('data.0.teachers', [])
+            ->assertJsonPath('data.0.subject_ids', [$subjectId]);
     }
 }

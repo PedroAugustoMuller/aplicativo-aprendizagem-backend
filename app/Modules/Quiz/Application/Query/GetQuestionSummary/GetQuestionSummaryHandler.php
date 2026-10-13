@@ -24,7 +24,7 @@ final readonly class GetQuestionSummaryHandler
             $classroom = $this->access->classroom($query->actor, $query->classroomId);
             $topic = $this->bank->topic($query->topicId);
 
-            if ($topic === null || $topic->subjectId !== $classroom->subjectId) {
+            if ($topic === null || ! in_array($topic->subjectId, $this->access->readableSubjects($query->actor, $classroom), true)) {
                 throw new QuizTopicNotFoundException;
             }
 

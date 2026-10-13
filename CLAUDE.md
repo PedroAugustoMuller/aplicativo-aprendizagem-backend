@@ -148,9 +148,10 @@ needs a fact that only the other owns, the contract lives in
 
 - `SubjectCatalog` — "is this subject id active?" `Content` owns subjects and
   implements it (`EloquentSubjectCatalog`); bound in `ContentServiceProvider`.
-  `Identity` depends on it to validate a classroom's `subject_id`.
-- `TeachingAssignments` — "which subject ids does this user teach/is enrolled
-  in through an active classroom?" `Identity` owns classrooms and
+  `Identity` depends on it to validate the subjects added to a classroom.
+- `TeachingAssignments` — "which subject ids does this user teach (every
+  subject of a whole-classroom assignment, plus each subject assignment) or
+  is enrolled in through an active classroom?" `Identity` owns classrooms and
   implements it (`EloquentTeachingAssignments`); bound in
   `IdentityServiceProvider`. `Content`'s `SubjectPolicy` depends on it to
   decide who may view or author a subject's topics.
@@ -158,12 +159,13 @@ needs a fact that only the other owns, the contract lives in
   active questions, with options and the correct one, does it hold?" `Content`
   owns topics and questions and implements it (`EloquentQuestionBank`); bound
   in `ContentServiceProvider`. `Quiz` depends on it to snapshot a new attempt.
-- `ClassroomRoster` — "which subject, teachers and enrolled students (id,
-  name, username) does this classroom have?" `Identity` owns classrooms and
+- `ClassroomRoster` — "which subjects, teacher assignments (whole classroom
+  or one subject) and enrolled students (id, name, username) does this
+  classroom have?" `Identity` owns classrooms and
   implements it (`EloquentClassroomRoster`); bound in
   `IdentityServiceProvider`. `Quiz` depends on it to show a classroom's
   progress to its teachers, and (`forSubject`) to summarise a topic's
-  questions across every classroom of a subject.
+  questions across every classroom holding a subject.
 
 These interfaces live in `Shared`, not in the module that happens to consume
 them, because a future module (`Quiz`, `Scoring`) will need the same facts

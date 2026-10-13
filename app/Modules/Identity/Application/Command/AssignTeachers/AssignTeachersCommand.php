@@ -8,10 +8,10 @@ use App\Shared\Domain\Auth\Actor;
 
 final readonly class AssignTeachersCommand
 {
-    /** @param  list<string>  $teacherIds */
+    /** @param  list<array{teacherId: string, subjectId: ?string}>  $assignments  subjectId null: the whole classroom */
     public function __construct(
         public Actor $actor,
         public string $classroomId,
-        public array $teacherIds,
+        public array $assignments,
     ) {}
 }

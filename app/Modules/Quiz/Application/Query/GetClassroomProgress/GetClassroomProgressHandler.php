@@ -12,17 +12,17 @@ use App\Modules\Quiz\Application\Service\ProgressAccess;
 use App\Modules\Quiz\Domain\Service\Progress;
 use App\Shared\Domain\Contract\RosterStudent;
 
-/** Every enrolled student and their tier per topic, within the classroom's subject only. */
+/** Every enrolled student and their tier per topic, within one subject of the classroom. */
 final readonly class GetClassroomProgressHandler
 {
     public function __construct(private ProgressReader $reader, private ProgressAccess $access) {}
 
     public function handle(GetClassroomProgressQuery $query): ClassroomProgressView
     {
-        $classroom = $this->access->classroom($query->actor, $query->classroomId);
+        $classroom = $this->access->classroomSubject($query->actor, $query->classroomId, $query->subjectId);
         $answers = $this->reader->answersForStudents(
             array_map(static fn (RosterStudent $s): string => $s->id, $classroom->students),
-            $classroom->subjectId,
+            $query->subjectId,
         );
 
         return new ClassroomProgressView(array_map(static function (RosterStudent $student) use ($answers): StudentProgressView {

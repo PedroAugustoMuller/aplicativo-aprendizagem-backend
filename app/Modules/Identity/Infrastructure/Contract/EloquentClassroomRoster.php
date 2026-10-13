@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Infrastructure\Contract;
 
 use App\Shared\Domain\Contract\ClassroomRoster;
+use App\Shared\Domain\Contract\RosterAssignment;
 use App\Shared\Domain\Contract\RosterClassroom;
 use App\Shared\Domain\Contract\RosterStudent;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
@@ -21,27 +22,40 @@ final class EloquentClassroomRoster implements ClassroomRoster
 
     public function forSubject(string $subjectId): array
     {
-        return $this->load(DB::table('classrooms')->where('subject_id', $subjectId)->orderBy('name')->orderBy('id'));
+        return $this->load(DB::table('classrooms')
+            ->whereExists(static fn ($query) => $query->selectRaw('1')
+                ->from('classroom_subjects')
+                ->whereColumn('classroom_subjects.classroom_id', 'classrooms.id')
+                ->where('classroom_subjects.subject_id', $subjectId))
+            ->orderBy('name')
+            ->orderBy('id'));
     }
 
     /**
-     * Three queries however many classrooms: the classrooms, their teachers, their students.
+     * Four queries however many classrooms: the classrooms, their subjects, their teachers, their students.
      *
      * @return list<RosterClassroom>
      */
     private function load(Builder $classrooms): array
     {
-        $rows = $classrooms->get(['id', 'subject_id', 'deactivated_at']);
+        $rows = $classrooms->get(['id', 'deactivated_at']);
 
         if ($rows->isEmpty()) {
             return [];
         }
 
         $ids = $rows->map(static fn (object $row): string => EloquentAttribute::string($row->id ?? null, 'classrooms.id'))->all();
-        $teacherIds = [];
+        $subjectIds = [];
+        foreach (DB::table('classroom_subjects')->whereIn('classroom_id', $ids)->orderBy('subject_id')->get(['classroom_id', 'subject_id']) as $row) {
+            $subjectIds[EloquentAttribute::string($row->classroom_id, 'classroom_subjects.classroom_id')][] = EloquentAttribute::string($row->subject_id, 'classroom_subjects.subject_id');
+        }
 
-        foreach (DB::table('classroom_teachers')->whereIn('classroom_id', $ids)->orderBy('user_id')->get(['classroom_id', 'user_id']) as $row) {
-            $teacherIds[EloquentAttribute::string($row->classroom_id, 'classroom_teachers.classroom_id')][] = EloquentAttribute::string($row->user_id, 'classroom_teachers.user_id');
+        $assignments = [];
+        foreach (DB::table('classroom_teachers')->whereIn('classroom_id', $ids)->orderBy('user_id')->get(['classroom_id', 'user_id', 'subject_id']) as $row) {
+            $assignments[EloquentAttribute::string($row->classroom_id, 'classroom_teachers.classroom_id')][] = new RosterAssignment(
+                EloquentAttribute::string($row->user_id, 'classroom_teachers.user_id'),
+                $row->subject_id === null ? null : EloquentAttribute::string($row->subject_id, 'classroom_teachers.subject_id'),
+            );
         }
 
         $students = [];
@@ -60,14 +74,14 @@ final class EloquentClassroomRoster implements ClassroomRoster
             );
         }
 
-        return array_values($rows->map(static function (object $row) use ($teacherIds, $students): RosterClassroom {
+        return array_values($rows->map(static function (object $row) use ($subjectIds, $assignments, $students): RosterClassroom {
             $id = EloquentAttribute::string($row->id ?? null, 'classrooms.id');
 
             return new RosterClassroom(
                 $id,
-                EloquentAttribute::string($row->subject_id ?? null, 'classrooms.subject_id'),
+                $subjectIds[$id] ?? [],
                 ($row->deactivated_at ?? null) === null,
-                $teacherIds[$id] ?? [],
+                $assignments[$id] ?? [],
                 $students[$id] ?? [],
             );
         })->all());

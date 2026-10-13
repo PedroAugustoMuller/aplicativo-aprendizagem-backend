@@ -8,9 +8,11 @@ use App\Modules\Identity\Domain\Entity\Classroom;
 use App\Modules\Identity\Domain\Repository\ClassroomRepository;
 use App\Modules\Identity\Domain\ValueObject\ClassroomId;
 use App\Modules\Identity\Domain\ValueObject\ClassroomName;
+use App\Modules\Identity\Domain\ValueObject\TeachingAssignment;
 use App\Modules\Identity\Domain\ValueObject\UserId;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 final class EloquentClassroomRepository implements ClassroomRepository
 {
@@ -24,7 +26,14 @@ final class EloquentClassroomRepository implements ClassroomRepository
             return null;
         }
 
-        return $this->mapper->toDomain($model, $this->pivotUserIds('classroom_teachers', $id), $this->pivotUserIds('classroom_students', $id));
+        $ids = [$id->value()];
+
+        return $this->mapper->toDomain(
+            $model,
+            $this->subjectsByClassroom($ids)[$id->value()] ?? [],
+            $this->assignmentsByClassroom($ids)[$id->value()] ?? [],
+            $this->pivotUserIdsGroupedByClassroom('classroom_students', $ids)[$id->value()] ?? [],
+        );
     }
 
     /**
@@ -40,9 +49,9 @@ final class EloquentClassroomRepository implements ClassroomRepository
     }
 
     /**
-     * Loads every matching classroom plus both pivots in three queries total,
-     * regardless of how many classrooms the student is in — findById() in a loop
-     * would instead cost one query per classroom (an N+1 once a caller such as
+     * Loads every matching classroom plus subjects, assignments and students in four
+     * queries total, regardless of how many classrooms the student is in — findById()
+     * in a loop would cost a query per classroom (an N+1 once a caller such as
      * RosterPolicy::canManageStudent runs this on every request).
      */
     public function findByStudent(UserId $studentId): array
@@ -57,18 +66,19 @@ final class EloquentClassroomRepository implements ClassroomRepository
             return [];
         }
 
-        $classroomIds = array_values($models
+        $ids = array_values($models
             ->map(fn (ClassroomModel $model): string => EloquentAttribute::string($model->getKey(), 'classrooms.id'))
             ->all());
 
-        $teachersByClassroom = $this->pivotUserIdsGroupedByClassroom('classroom_teachers', $classroomIds);
-        $studentsByClassroom = $this->pivotUserIdsGroupedByClassroom('classroom_students', $classroomIds);
+        $subjects = $this->subjectsByClassroom($ids);
+        $assignments = $this->assignmentsByClassroom($ids);
+        $students = $this->pivotUserIdsGroupedByClassroom('classroom_students', $ids);
 
         return array_values($models
-            ->map(function (ClassroomModel $model) use ($teachersByClassroom, $studentsByClassroom): Classroom {
+            ->map(function (ClassroomModel $model) use ($subjects, $assignments, $students): Classroom {
                 $id = EloquentAttribute::string($model->getKey(), 'classrooms.id');
 
-                return $this->mapper->toDomain($model, $teachersByClassroom[$id] ?? [], $studentsByClassroom[$id] ?? []);
+                return $this->mapper->toDomain($model, $subjects[$id] ?? [], $assignments[$id] ?? [], $students[$id] ?? []);
             })
             ->all());
     }
@@ -85,8 +95,12 @@ final class EloquentClassroomRepository implements ClassroomRepository
                 ClassroomModel::query()->updateOrCreate(['id' => $classroomId], $this->mapper->toAttributes($classroom));
             }
 
+            if ($classroom->isNew() || $classroom->subjectsChanged()) {
+                $this->replaceSubjects($classroomId, $classroom->subjectIds());
+            }
+
             if ($classroom->isNew() || $classroom->teachersChanged()) {
-                $this->syncPivot('classroom_teachers', $classroomId, self::values($classroom->teacherIds()));
+                $this->replaceAssignments($classroomId, $classroom->assignments());
             }
 
             $removed = self::values($classroom->unenrolledStudentIds());
@@ -113,32 +127,73 @@ final class EloquentClassroomRepository implements ClassroomRepository
         return array_map(static fn (UserId $id): string => $id->value(), $ids);
     }
 
-    /** @param  list<string>  $userIds */
-    private function syncPivot(string $table, string $classroomId, array $userIds): void
+    /** @param  list<string>  $subjectIds */
+    private function replaceSubjects(string $classroomId, array $subjectIds): void
     {
-        DB::table($table)
+        DB::table('classroom_subjects')
             ->where('classroom_id', $classroomId)
-            ->when($userIds !== [], fn ($query) => $query->whereNotIn('user_id', $userIds))
+            ->when($subjectIds !== [], fn ($query) => $query->whereNotIn('subject_id', $subjectIds))
             ->delete();
 
-        if ($userIds === []) {
+        if ($subjectIds !== []) {
+            DB::table('classroom_subjects')->insertOrIgnore(array_map(
+                static fn (string $subjectId): array => ['classroom_id' => $classroomId, 'subject_id' => $subjectId],
+                $subjectIds,
+            ));
+        }
+    }
+
+    /**
+     * The assignment list is replaced as a whole, like the teacher list was.
+     *
+     * @param  list<TeachingAssignment>  $assignments
+     */
+    private function replaceAssignments(string $classroomId, array $assignments): void
+    {
+        DB::table('classroom_teachers')->where('classroom_id', $classroomId)->delete();
+
+        if ($assignments === []) {
             return;
         }
 
-        DB::table($table)->insertOrIgnore(array_map(
-            static fn (string $userId): array => ['classroom_id' => $classroomId, 'user_id' => $userId],
-            $userIds,
+        DB::table('classroom_teachers')->insert(array_map(
+            static fn (TeachingAssignment $a): array => [
+                'id' => (string) Str::uuid7(), 'classroom_id' => $classroomId,
+                'user_id' => $a->teacherId->value(), 'subject_id' => $a->subjectId,
+            ],
+            $assignments,
         ));
     }
 
-    /** @return list<string> */
-    private function pivotUserIds(string $table, ClassroomId $classroomId): array
+    /**
+     * @param  list<string>  $classroomIds
+     * @return array<string, list<string>>
+     */
+    private function subjectsByClassroom(array $classroomIds): array
     {
-        return array_values(DB::table($table)
-            ->where('classroom_id', $classroomId->value())
-            ->pluck('user_id')
-            ->map(fn (mixed $id): string => EloquentAttribute::string($id, $table.'.user_id'))
-            ->all());
+        $grouped = [];
+        foreach (DB::table('classroom_subjects')->whereIn('classroom_id', $classroomIds)->orderBy('subject_id')->get(['classroom_id', 'subject_id']) as $row) {
+            $grouped[EloquentAttribute::string($row->classroom_id, 'classroom_subjects.classroom_id')][] = EloquentAttribute::string($row->subject_id, 'classroom_subjects.subject_id');
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * @param  list<string>  $classroomIds
+     * @return array<string, list<array{user_id: string, subject_id: ?string}>>
+     */
+    private function assignmentsByClassroom(array $classroomIds): array
+    {
+        $grouped = [];
+        foreach (DB::table('classroom_teachers')->whereIn('classroom_id', $classroomIds)->get(['classroom_id', 'user_id', 'subject_id']) as $row) {
+            $grouped[EloquentAttribute::string($row->classroom_id, 'classroom_teachers.classroom_id')][] = [
+                'user_id' => EloquentAttribute::string($row->user_id, 'classroom_teachers.user_id'),
+                'subject_id' => $row->subject_id === null ? null : EloquentAttribute::string($row->subject_id, 'classroom_teachers.subject_id'),
+            ];
+        }
+
+        return $grouped;
     }
 
     /**

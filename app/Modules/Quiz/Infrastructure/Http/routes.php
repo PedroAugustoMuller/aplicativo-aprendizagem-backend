@@ -18,7 +18,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'password.changed', 'role:s
 
 // Staff: which classroom and which student is the handlers' ProgressAccess rule.
 Route::middleware(['auth:sanctum', 'account.active', 'password.changed', 'role:staff'])->group(function (): void {
-    Route::get('/classrooms/{id}/quiz-progress', [ProgressController::class, 'classroom'])->whereUuid('id');
+    Route::get('/classrooms/{id}/subjects/{subjectId}/quiz-progress', [ProgressController::class, 'classroom'])->whereUuid(['id', 'subjectId']);
     Route::get('/classrooms/{id}/students/{studentId}/topics/{topicId}/quiz-history', [ProgressController::class, 'studentHistory'])->whereUuid(['id', 'studentId', 'topicId']);
     Route::get('/classrooms/{id}/students/{studentId}/topics/{topicId}/wrong-questions', [ProgressController::class, 'studentWrong'])->whereUuid(['id', 'studentId', 'topicId']);
     Route::get('/classrooms/{id}/students/{studentId}/quiz-attempts/{attemptId}', [ProgressController::class, 'studentAttempt'])->whereUuid(['id', 'studentId', 'attemptId']);

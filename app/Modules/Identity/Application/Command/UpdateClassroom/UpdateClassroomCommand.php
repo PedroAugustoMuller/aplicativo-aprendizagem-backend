@@ -12,6 +12,5 @@ final readonly class UpdateClassroomCommand
         public Actor $actor,
         public string $id,
         public string $name,
-        public string $subjectId,
     ) {}
 }

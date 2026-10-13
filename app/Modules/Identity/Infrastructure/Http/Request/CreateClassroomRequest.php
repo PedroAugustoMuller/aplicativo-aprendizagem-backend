@@ -19,7 +19,8 @@ final class CreateClassroomRequest extends FormRequest
         return [
             'id' => ['required', 'uuid'],
             'name' => ['required', 'string', 'max:80'],
-            'subject_id' => ['required', 'uuid'],
+            'subject_ids' => ['present', 'array', 'max:30'],
+            'subject_ids.*' => ['uuid', 'distinct'],
         ];
     }
 }

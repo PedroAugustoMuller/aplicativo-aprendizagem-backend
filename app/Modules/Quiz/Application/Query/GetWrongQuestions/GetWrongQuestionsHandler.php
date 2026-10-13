@@ -24,7 +24,7 @@ final readonly class GetWrongQuestionsHandler
         $scope = $this->access->scopeFor($query->actor, $query->classroomId, $query->studentId);
         $latest = [];
 
-        foreach ($this->reader->answeredQuestions($scope->studentId, $query->topicId, $scope->subjectId) as $row) {
+        foreach ($this->reader->answeredQuestions($scope->studentId, $query->topicId, $scope->subjectIds) as $row) {
             $current = $latest[$row->questionId] ?? null;
 
             if ($current === null || [$row->answeredAt, $row->attemptStartedAt] > [$current->answeredAt, $current->attemptStartedAt]) {

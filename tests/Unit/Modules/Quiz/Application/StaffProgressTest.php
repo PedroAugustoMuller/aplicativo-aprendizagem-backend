@@ -23,6 +23,7 @@ use App\Modules\Quiz\Domain\ValueObject\Tier;
 use App\Shared\Domain\Auth\Actor;
 use App\Shared\Domain\Auth\Role;
 use App\Shared\Domain\Contract\BankTopic;
+use App\Shared\Domain\Contract\RosterAssignment;
 use App\Shared\Domain\Contract\RosterClassroom;
 use App\Shared\Domain\Contract\RosterStudent;
 use DateTimeImmutable;
@@ -54,7 +55,7 @@ final class StaffProgressTest extends TestCase
         $this->reader = new InMemoryProgressReader;
         $this->teacher = new Actor(self::TEACHER, Role::Teacher);
         $this->access = new ProgressAccess(new FixedRoster([
-            new RosterClassroom(self::CLASSROOM, BankFixtures::SUBJECT, true, [self::TEACHER], [
+            new RosterClassroom(self::CLASSROOM, [BankFixtures::SUBJECT], true, [new RosterAssignment(self::TEACHER, BankFixtures::SUBJECT)], [
                 new RosterStudent(self::ANA, 'Ana', 'ana.lima'),
                 new RosterStudent(self::STUDENT, 'Carla', 'carla.dias'),
             ]),
@@ -66,7 +67,7 @@ final class StaffProgressTest extends TestCase
         $this->reader->answers[self::STUDENT.'|t-1|'.BankFixtures::SUBJECT] = [new ScoredAnswer('a', 'a-0', 0, true, new DateTimeImmutable('2026-10-01'))];
         $this->reader->answers[self::STUDENT.'|t-1|other-subject'] = [new ScoredAnswer('b', 'b-0', 0, true, new DateTimeImmutable('2026-10-01'))];
 
-        $view = (new GetClassroomProgressHandler($this->reader, $this->access))->handle(new GetClassroomProgressQuery($this->teacher, self::CLASSROOM));
+        $view = (new GetClassroomProgressHandler($this->reader, $this->access))->handle(new GetClassroomProgressQuery($this->teacher, self::CLASSROOM, BankFixtures::SUBJECT));
 
         self::assertSame(['Ana', 'Carla'], array_map(static fn ($s): string => $s->name, $view->students));
         self::assertSame([], $view->students[0]->topics);
@@ -79,7 +80,7 @@ final class StaffProgressTest extends TestCase
     {
         $this->expectException(QuizAccessDeniedException::class);
 
-        (new GetClassroomProgressHandler($this->reader, $this->access))->handle(new GetClassroomProgressQuery(new Actor(self::STUDENT, Role::Student), self::CLASSROOM));
+        (new GetClassroomProgressHandler($this->reader, $this->access))->handle(new GetClassroomProgressQuery(new Actor(self::STUDENT, Role::Student), self::CLASSROOM, BankFixtures::SUBJECT));
     }
 
     public function test_staff_history_is_limited_to_the_classroom_subject(): void

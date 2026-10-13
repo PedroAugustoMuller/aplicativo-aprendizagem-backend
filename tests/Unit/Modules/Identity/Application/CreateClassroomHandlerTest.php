@@ -33,12 +33,12 @@ final class CreateClassroomHandlerTest extends TestCase
         $classrooms = $this->classrooms();
 
         $view = (new CreateClassroomHandler($classrooms, $this->subjectCatalog([self::SUBJECT_ID])))
-            ->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', self::SUBJECT_ID));
+            ->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', [self::SUBJECT_ID]));
 
         self::assertSame(self::ID, $view->id);
         self::assertSame('Química 1', $view->name);
-        self::assertSame(self::SUBJECT_ID, $view->subjectId);
-        self::assertSame([], $view->teacherIds);
+        self::assertSame([self::SUBJECT_ID], $view->subjectIds);
+        self::assertSame([], $view->teachers);
         self::assertSame(0, $view->studentCount);
         self::assertTrue($view->active);
     }
@@ -48,7 +48,7 @@ final class CreateClassroomHandlerTest extends TestCase
         $this->expectException(AccessDeniedException::class);
 
         (new CreateClassroomHandler($this->classrooms(), $this->subjectCatalog([self::SUBJECT_ID])))
-            ->handle(new CreateClassroomCommand(new Actor('t', Role::Teacher), self::ID, 'Química 1', self::SUBJECT_ID));
+            ->handle(new CreateClassroomCommand(new Actor('t', Role::Teacher), self::ID, 'Química 1', [self::SUBJECT_ID]));
     }
 
     public function test_an_inactive_or_unknown_subject_is_rejected(): void
@@ -56,27 +56,27 @@ final class CreateClassroomHandlerTest extends TestCase
         $this->expectException(ClassroomSubjectInactiveException::class);
 
         (new CreateClassroomHandler($this->classrooms(), $this->subjectCatalog([])))
-            ->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', self::SUBJECT_ID));
+            ->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', [self::SUBJECT_ID]));
     }
 
     public function test_a_name_taken_by_another_classroom_is_rejected_case_insensitively(): void
     {
         $classrooms = $this->classrooms();
-        $classrooms->save(Classroom::create(new ClassroomId(self::ID), new ClassroomName('Química 1'), self::SUBJECT_ID));
+        $classrooms->save(Classroom::create(new ClassroomId(self::ID), new ClassroomName('Química 1'), [self::SUBJECT_ID]));
 
         $this->expectException(ClassroomNameAlreadyTakenException::class);
 
         (new CreateClassroomHandler($classrooms, $this->subjectCatalog([self::SUBJECT_ID])))
-            ->handle(new CreateClassroomCommand($this->admin(), self::OTHER_ID, 'química 1', self::SUBJECT_ID));
+            ->handle(new CreateClassroomCommand($this->admin(), self::OTHER_ID, 'química 1', [self::SUBJECT_ID]));
     }
 
     public function test_replaying_the_same_id_and_payload_returns_the_original(): void
     {
         $classrooms = $this->classrooms();
         $handler = new CreateClassroomHandler($classrooms, $this->subjectCatalog([self::SUBJECT_ID]));
-        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', self::SUBJECT_ID));
+        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', [self::SUBJECT_ID]));
 
-        $again = $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', self::SUBJECT_ID));
+        $again = $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', [self::SUBJECT_ID]));
 
         self::assertSame('Química 1', $again->name);
     }
@@ -85,10 +85,10 @@ final class CreateClassroomHandlerTest extends TestCase
     {
         $classrooms = $this->classrooms();
         $handler = new CreateClassroomHandler($classrooms, $this->subjectCatalog([self::SUBJECT_ID]));
-        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', self::SUBJECT_ID));
+        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', [self::SUBJECT_ID]));
 
         $this->expectException(IdempotencyConflictException::class);
-        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 2', self::SUBJECT_ID));
+        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 2', [self::SUBJECT_ID]));
     }
 
     public function test_replaying_the_same_id_with_a_different_subject_conflicts(): void
@@ -96,10 +96,24 @@ final class CreateClassroomHandlerTest extends TestCase
         $otherSubject = '0190a2b4-0000-7000-8000-000000000002';
         $classrooms = $this->classrooms();
         $handler = new CreateClassroomHandler($classrooms, $this->subjectCatalog([self::SUBJECT_ID, $otherSubject]));
-        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', self::SUBJECT_ID));
+        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', [self::SUBJECT_ID]));
 
         $this->expectException(IdempotencyConflictException::class);
-        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', $otherSubject));
+        $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, 'Química 1', [$otherSubject]));
+    }
+
+    public function test_a_classroom_may_start_with_no_subjects_and_replays_with_the_same_set_in_any_order(): void
+    {
+        $other = '0190a2b4-0000-7000-8000-000000000002';
+        $handler = new CreateClassroomHandler($this->classrooms(), $this->subjectCatalog([self::SUBJECT_ID, $other]));
+
+        $first = $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, '7º A', [self::SUBJECT_ID, $other]));
+        $replay = $handler->handle(new CreateClassroomCommand($this->admin(), self::ID, '7º A', [$other, self::SUBJECT_ID]));
+        $empty = $handler->handle(new CreateClassroomCommand($this->admin(), self::OTHER_ID, '7º B', []));
+
+        self::assertSame([self::SUBJECT_ID, $other], $first->subjectIds);
+        self::assertSame($first->subjectIds, $replay->subjectIds);
+        self::assertSame([], $empty->subjectIds);
     }
 
     private function admin(): Actor

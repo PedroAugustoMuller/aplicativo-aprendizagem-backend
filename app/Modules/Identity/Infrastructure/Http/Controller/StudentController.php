@@ -15,7 +15,6 @@ use App\Modules\Identity\Application\Command\SetStudentActive\SetStudentActiveHa
 use App\Modules\Identity\Application\Command\UnenrolStudent\UnenrolStudentCommand;
 use App\Modules\Identity\Application\Command\UnenrolStudent\UnenrolStudentHandler;
 use App\Modules\Identity\Application\DTO\AccountView;
-use App\Modules\Identity\Application\DTO\ClassroomView;
 use App\Modules\Identity\Application\DTO\IssuedCredential;
 use App\Modules\Identity\Application\Query\ListCredentials\ListCredentialsHandler;
 use App\Modules\Identity\Application\Query\ListCredentials\ListCredentialsQuery;
@@ -29,6 +28,7 @@ use App\Modules\Identity\Domain\Repository\UserRepository;
 use App\Modules\Identity\Domain\ValueObject\UserId;
 use App\Modules\Identity\Infrastructure\Http\Request\CreateStudentsRequest;
 use App\Modules\Identity\Infrastructure\Http\Request\SearchStudentsRequest;
+use App\Modules\Identity\Infrastructure\Http\Resource\ClassroomResource;
 use App\Shared\Infrastructure\Http\ActorFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -74,14 +74,14 @@ final class StudentController
     {
         $view = $handler->handle(new EnrolStudentCommand($this->actors->fromRequest($request), $id, $studentId));
 
-        return new JsonResponse(['data' => $this->presentClassroom($view)]);
+        return new JsonResponse(['data' => ClassroomResource::toArray($view)]);
     }
 
     public function unenrol(Request $request, string $id, string $studentId, UnenrolStudentHandler $handler): JsonResponse
     {
         $view = $handler->handle(new UnenrolStudentCommand($this->actors->fromRequest($request), $id, $studentId));
 
-        return new JsonResponse(['data' => $this->presentClassroom($view)]);
+        return new JsonResponse(['data' => ClassroomResource::toArray($view)]);
     }
 
     public function resetPassword(Request $request, string $id, ResetStudentPasswordHandler $handler): JsonResponse
@@ -147,19 +147,6 @@ final class StudentController
             'must_change_password' => $view->mustChangePassword,
             'active' => $view->active,
             'temporary_password' => $view->temporaryPassword,
-        ];
-    }
-
-    /** @return array{id: string, name: string, subject_id: string, teacher_ids: list<string>, student_count: int, active: bool} */
-    private function presentClassroom(ClassroomView $view): array
-    {
-        return [
-            'id' => $view->id,
-            'name' => $view->name,
-            'subject_id' => $view->subjectId,
-            'teacher_ids' => $view->teacherIds,
-            'student_count' => $view->studentCount,
-            'active' => $view->active,
         ];
     }
 

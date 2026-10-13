@@ -10,9 +10,10 @@ use App\Modules\Identity\Application\Command\CreateClassroom\CreateClassroomComm
 use App\Modules\Identity\Application\Command\CreateClassroom\CreateClassroomHandler;
 use App\Modules\Identity\Application\Command\DeactivateClassroom\DeactivateClassroomCommand;
 use App\Modules\Identity\Application\Command\DeactivateClassroom\DeactivateClassroomHandler;
+use App\Modules\Identity\Application\Command\ReplaceClassroomSubjects\ReplaceClassroomSubjectsCommand;
+use App\Modules\Identity\Application\Command\ReplaceClassroomSubjects\ReplaceClassroomSubjectsHandler;
 use App\Modules\Identity\Application\Command\UpdateClassroom\UpdateClassroomCommand;
 use App\Modules\Identity\Application\Command\UpdateClassroom\UpdateClassroomHandler;
-use App\Modules\Identity\Application\DTO\ClassroomView;
 use App\Modules\Identity\Application\Query\ListClassrooms\ClassroomListItem;
 use App\Modules\Identity\Application\Query\ListClassrooms\ListClassroomsHandler;
 use App\Modules\Identity\Application\Query\ListClassrooms\ListClassroomsQuery;
@@ -20,8 +21,9 @@ use App\Modules\Identity\Domain\Repository\ClassroomRepository;
 use App\Modules\Identity\Domain\ValueObject\ClassroomId;
 use App\Modules\Identity\Infrastructure\Http\Request\AssignTeachersRequest;
 use App\Modules\Identity\Infrastructure\Http\Request\CreateClassroomRequest;
+use App\Modules\Identity\Infrastructure\Http\Request\ReplaceClassroomSubjectsRequest;
 use App\Modules\Identity\Infrastructure\Http\Request\UpdateClassroomRequest;
-use App\Shared\Domain\Auth\Actor;
+use App\Modules\Identity\Infrastructure\Http\Resource\ClassroomResource;
 use App\Shared\Infrastructure\Http\ActorFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,7 +38,7 @@ final class ClassroomController
         $items = $handler->handle(new ListClassroomsQuery($actor));
 
         return new JsonResponse(['data' => array_map(
-            fn (ClassroomListItem $item): array => $this->presentListItem($item, $actor),
+            static fn (ClassroomListItem $item): array => ClassroomResource::toArray($item, $actor->isStudent()),
             $items,
         )]);
     }
@@ -49,10 +51,10 @@ final class ClassroomController
             $this->actors->fromRequest($request),
             (string) $request->string('id'),
             (string) $request->string('name'),
-            (string) $request->string('subject_id'),
+            $this->subjectIds($request),
         ));
 
-        return new JsonResponse(['data' => $this->present($view)], $existed ? 200 : 201);
+        return new JsonResponse(['data' => ClassroomResource::toArray($view)], $existed ? 200 : 201);
     }
 
     public function update(UpdateClassroomRequest $request, string $id, UpdateClassroomHandler $handler): JsonResponse
@@ -61,57 +63,45 @@ final class ClassroomController
             $this->actors->fromRequest($request),
             $id,
             (string) $request->string('name'),
-            (string) $request->string('subject_id'),
         ));
 
-        return new JsonResponse(['data' => $this->present($view)]);
+        return new JsonResponse(['data' => ClassroomResource::toArray($view)]);
     }
 
     public function assignTeachers(AssignTeachersRequest $request, string $id, AssignTeachersHandler $handler): JsonResponse
     {
-        /** @var list<string> $teacherIds */
-        $teacherIds = $request->input('teacher_ids', []);
+        /** @var list<array{teacher_id: string, subject_id: string|null}> $rows */
+        $rows = $request->input('assignments', []);
 
         $view = $handler->handle(new AssignTeachersCommand(
             $this->actors->fromRequest($request),
             $id,
-            $teacherIds,
+            array_map(static fn (array $row): array => ['teacherId' => $row['teacher_id'], 'subjectId' => $row['subject_id']], $rows),
         ));
 
-        return new JsonResponse(['data' => $this->present($view)]);
+        return new JsonResponse(['data' => ClassroomResource::toArray($view)]);
+    }
+
+    public function replaceSubjects(ReplaceClassroomSubjectsRequest $request, string $id, ReplaceClassroomSubjectsHandler $handler): JsonResponse
+    {
+        $view = $handler->handle(new ReplaceClassroomSubjectsCommand($this->actors->fromRequest($request), $id, $this->subjectIds($request)));
+
+        return new JsonResponse(['data' => ClassroomResource::toArray($view)]);
     }
 
     public function deactivate(Request $request, string $id, DeactivateClassroomHandler $handler): JsonResponse
     {
         $view = $handler->handle(new DeactivateClassroomCommand($this->actors->fromRequest($request), $id));
 
-        return new JsonResponse(['data' => $this->present($view)]);
+        return new JsonResponse(['data' => ClassroomResource::toArray($view)]);
     }
 
-    /** @return array{id: string, name: string, subject_id: string, teacher_ids: list<string>, student_count: int, active: bool} */
-    private function present(ClassroomView $view): array
+    /** @return list<string> */
+    private function subjectIds(Request $request): array
     {
-        return [
-            'id' => $view->id,
-            'name' => $view->name,
-            'subject_id' => $view->subjectId,
-            'teacher_ids' => $view->teacherIds,
-            'student_count' => $view->studentCount,
-            'active' => $view->active,
-        ];
-    }
+        /** @var list<string> $ids */
+        $ids = $request->input('subject_ids', []);
 
-    /** @return array{id: string, name: string, subject_id: string, teacher_ids: list<string>, student_count: int, active: bool} */
-    private function presentListItem(ClassroomListItem $item, Actor $actor): array
-    {
-        return [
-            'id' => $item->id,
-            'name' => $item->name,
-            'subject_id' => $item->subjectId,
-            // Students have no use for staff ids; only the admin UI pre-selects teachers from it.
-            'teacher_ids' => $actor->isStudent() ? [] : $item->teacherIds,
-            'student_count' => $item->studentCount,
-            'active' => $item->active,
-        ];
+        return $ids;
     }
 }

@@ -36,8 +36,8 @@ final class EloquentClassroomRepositoryTest extends TestCase
         $unrelated = $this->classroom($subject, 'Química 3');
 
         DB::table('classroom_teachers')->insert([
-            ['classroom_id' => $classroomA, 'user_id' => $teacherA->getKey()],
-            ['classroom_id' => $classroomB, 'user_id' => $teacherB->getKey()],
+            ['id' => (string) Str::uuid7(), 'classroom_id' => $classroomA, 'user_id' => $teacherA->getKey(), 'subject_id' => $subject],
+            ['id' => (string) Str::uuid7(), 'classroom_id' => $classroomB, 'user_id' => $teacherB->getKey(), 'subject_id' => null],
         ]);
         DB::table('classroom_students')->insert([
             ['classroom_id' => $classroomA, 'user_id' => $student->getKey()],
@@ -89,7 +89,8 @@ final class EloquentClassroomRepositoryTest extends TestCase
         DB::disableQueryLog();
 
         self::assertCount(5, $found);
-        self::assertLessThanOrEqual(3, $queryCount);
+        // Classrooms, subjects, assignments, students: four, however many classrooms.
+        self::assertLessThanOrEqual(4, $queryCount);
     }
 
     /*
@@ -144,7 +145,7 @@ final class EloquentClassroomRepositoryTest extends TestCase
         $staffed = $this->load($classroomId);
         $enrolled = $this->load($classroomId);
         $renamed->rename(new ClassroomName('Química A'));
-        $staffed->assignTeachers([$this->domainUser($teacher)]);
+        $staffed->replaceAssignments([[$this->domainUser($teacher), null]]);
         $enrolled->enrol($this->domainUser($ana));
         $this->repository()->save($renamed);
         $this->repository()->save($staffed);
@@ -154,6 +155,31 @@ final class EloquentClassroomRepositoryTest extends TestCase
         self::assertSame('Química A', $stored->name()->value());
         self::assertTrue($stored->isTaughtBy(new UserId($this->id($teacher))));
         self::assertTrue($stored->hasStudent(new UserId($this->id($ana))));
+    }
+
+    public function test_subjects_and_assignments_round_trip(): void
+    {
+        $mat = $this->subject('Matemática');
+        $port = $this->subject('Português');
+        $ana = $this->domainUser($this->user('teacher'));
+        $carlos = $this->domainUser($this->user('teacher'));
+        $classroom = Classroom::create(ClassroomId::random(), new ClassroomName('7º A'), [$mat, $port]);
+        $classroom->replaceAssignments([[$ana, null], [$carlos, $mat]]);
+        $this->repository()->save($classroom);
+
+        $loaded = $this->load($classroom->id()->value());
+        self::assertEqualsCanonicalizing([$mat, $port], $loaded->subjectIds());
+        self::assertTrue($loaded->teaches($ana->id(), $port));
+        self::assertTrue($loaded->teaches($carlos->id(), $mat));
+        self::assertFalse($loaded->teaches($carlos->id(), $port));
+
+        $loaded->replaceSubjects([$port]);
+        $this->repository()->save($loaded);
+
+        $reloaded = $this->load($classroom->id()->value());
+        self::assertSame([$port], $reloaded->subjectIds());
+        self::assertFalse($reloaded->isTaughtBy($carlos->id()));
+        self::assertSame(1, DB::table('classroom_teachers')->where('classroom_id', $classroom->id()->value())->count());
     }
 
     private function load(string $classroomId): Classroom
@@ -197,10 +223,10 @@ final class EloquentClassroomRepositoryTest extends TestCase
         ]);
     }
 
-    private function subject(): string
+    private function subject(string $name = 'Química'): string
     {
         $id = (string) Str::uuid7();
-        DB::table('subjects')->insert(['id' => $id, 'name' => 'Química', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('subjects')->insert(['id' => $id, 'name' => $name, 'created_at' => now(), 'updated_at' => now()]);
 
         return $id;
     }
@@ -211,10 +237,10 @@ final class EloquentClassroomRepositoryTest extends TestCase
         DB::table('classrooms')->insert([
             'id' => $id,
             'name' => $name,
-            'subject_id' => $subjectId,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+        DB::table('classroom_subjects')->insert(['classroom_id' => $id, 'subject_id' => $subjectId]);
 
         return $id;
     }

@@ -23,6 +23,7 @@ Route::middleware(['auth:sanctum', 'account.active', 'password.changed'])->group
         Route::post('/classrooms', [ClassroomController::class, 'store']);
         Route::patch('/classrooms/{id}', [ClassroomController::class, 'update'])->whereUuid('id');
         Route::put('/classrooms/{id}/teachers', [ClassroomController::class, 'assignTeachers'])->whereUuid('id');
+        Route::put('/classrooms/{id}/subjects', [ClassroomController::class, 'replaceSubjects'])->whereUuid('id');
         Route::post('/classrooms/{id}/deactivate', [ClassroomController::class, 'deactivate'])->whereUuid('id');
 
         Route::get('/teachers', [TeacherController::class, 'index']);

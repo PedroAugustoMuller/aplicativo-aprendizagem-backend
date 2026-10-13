@@ -14,6 +14,7 @@ use App\Modules\Quiz\Domain\ValueObject\SummaryAnswer;
 use App\Shared\Domain\Auth\Actor;
 use App\Shared\Domain\Auth\Role;
 use App\Shared\Domain\Contract\BankTopic;
+use App\Shared\Domain\Contract\RosterAssignment;
 use App\Shared\Domain\Contract\RosterClassroom;
 use App\Shared\Domain\Contract\RosterStudent;
 use DateTimeImmutable;
@@ -60,11 +61,11 @@ final class QuestionSummaryHandlerTest extends TestCase
         $subject = BankFixtures::SUBJECT;
 
         return new GetQuestionSummaryHandler($this->reader, new ProgressAccess(new FixedRoster($classrooms ?? [
-            new RosterClassroom(self::MINE_A, $subject, true, [self::TEACHER], [self::student('ana'), self::student('bia')]),
-            new RosterClassroom(self::MINE_B, $subject, true, [self::TEACHER], [self::student('bia'), self::student('caio')]),
-            new RosterClassroom(self::OTHERS, $subject, true, [self::OTHER_TEACHER], [self::student('davi')]),
-            new RosterClassroom(self::CLOSED, $subject, false, [self::TEACHER], [self::student('eva')]),
-            new RosterClassroom(self::BIOLOGY, 'biology', true, [self::TEACHER], [self::student('fabi')]),
+            new RosterClassroom(self::MINE_A, [$subject], true, [new RosterAssignment(self::TEACHER, $subject)], [self::student('ana'), self::student('bia')]),
+            new RosterClassroom(self::MINE_B, [$subject], true, [new RosterAssignment(self::TEACHER, $subject)], [self::student('bia'), self::student('caio')]),
+            new RosterClassroom(self::OTHERS, [$subject], true, [new RosterAssignment(self::OTHER_TEACHER, $subject)], [self::student('davi')]),
+            new RosterClassroom(self::CLOSED, [$subject], false, [new RosterAssignment(self::TEACHER, $subject)], [self::student('eva')]),
+            new RosterClassroom(self::BIOLOGY, ['biology'], true, [new RosterAssignment(self::TEACHER, 'biology')], [self::student('fabi')]),
         ])), new FakeQuestionBank($topic ?? BankFixtures::topic(), []));
     }
 

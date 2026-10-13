@@ -25,6 +25,6 @@ final class FixedRoster implements ClassroomRoster
 
     public function forSubject(string $subjectId): array
     {
-        return array_values(array_filter($this->classrooms, static fn (RosterClassroom $c): bool => $c->subjectId === $subjectId));
+        return array_values(array_filter($this->classrooms, static fn (RosterClassroom $c): bool => $c->hasSubject($subjectId)));
     }
 }

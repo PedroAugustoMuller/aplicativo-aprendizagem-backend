@@ -108,8 +108,8 @@ final class ResetStudentPasswordHandlerTest extends TestCase
     private function classroomsWith(UserId $teacherId, ?User $student): InMemoryClassroomRepository
     {
         $classrooms = $this->classrooms();
-        $classroom = Classroom::create(new ClassroomId(self::CLASSROOM_ID), new ClassroomName('Química 1'), self::SUBJECT_ID);
-        $classroom->assignTeachers([User::staff($teacherId, 'Ana', new Email('ana@escola.br'), $this->hash(), Role::Teacher, false)]);
+        $classroom = Classroom::create(new ClassroomId(self::CLASSROOM_ID), new ClassroomName('Química 1'), [self::SUBJECT_ID]);
+        $classroom->replaceAssignments([[User::staff($teacherId, 'Ana', new Email('ana@escola.br'), $this->hash(), Role::Teacher, false), self::SUBJECT_ID]]);
         if ($student !== null) {
             $classroom->enrol($student);
         }

@@ -33,7 +33,7 @@ final class RosterPolicyTest extends TestCase
     {
         $teacherId = UserId::random();
         $classroom = $this->classroom();
-        $classroom->assignTeachers([$this->teacher($teacherId)]);
+        $classroom->replaceAssignments([[$this->teacher($teacherId), self::SUBJECT_ID]]);
         $otherClassroom = $this->classroom();
 
         $policy = new RosterPolicy(new InMemoryClassroomRepository);
@@ -64,7 +64,7 @@ final class RosterPolicyTest extends TestCase
         $studentId = UserId::random();
 
         $taught = $this->classroom();
-        $taught->assignTeachers([$this->teacher($teacherId)]);
+        $taught->replaceAssignments([[$this->teacher($teacherId), self::SUBJECT_ID]]);
         $taught->enrol($this->student($studentId));
 
         $unrelated = $this->classroom();
@@ -110,7 +110,7 @@ final class RosterPolicyTest extends TestCase
 
     private function classroom(): Classroom
     {
-        return Classroom::create(ClassroomId::random(), new ClassroomName('Química 1'), self::SUBJECT_ID);
+        return Classroom::create(ClassroomId::random(), new ClassroomName('Química 1'), [self::SUBJECT_ID]);
     }
 
     private function teacher(UserId $id): User

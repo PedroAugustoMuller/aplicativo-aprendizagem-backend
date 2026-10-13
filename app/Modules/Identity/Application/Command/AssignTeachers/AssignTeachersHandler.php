@@ -29,16 +29,17 @@ final readonly class AssignTeachersHandler
         $classroom = $this->classrooms->findById(new ClassroomId($command->classroomId))
             ?? throw new ClassroomNotFoundException;
 
-        $teachers = [];
-        foreach (array_unique($command->teacherIds) as $teacherId) {
-            $user = $this->users->findById(new UserId($teacherId));
+        $users = [];
+        $assignments = [];
+        foreach ($command->assignments as $row) {
+            $user = $users[$row['teacherId']] ??= $this->users->findById(new UserId($row['teacherId']));
             if ($user === null || ! $user->role()->isStaff() || ! $user->isActive()) {
                 throw new TeacherNotFoundException;
             }
-            $teachers[] = $user;
+            $assignments[] = [$user, $row['subjectId']];
         }
 
-        $classroom->assignTeachers($teachers);
+        $classroom->replaceAssignments($assignments);
         $this->classrooms->save($classroom);
 
         return ClassroomView::of($classroom);

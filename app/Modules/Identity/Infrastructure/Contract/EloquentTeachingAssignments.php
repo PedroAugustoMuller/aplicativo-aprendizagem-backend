@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Infrastructure\Contract;
 
 use App\Shared\Domain\Contract\TeachingAssignments;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -15,30 +16,48 @@ use Illuminate\Support\Facades\DB;
  */
 final class EloquentTeachingAssignments implements TeachingAssignments
 {
+    /** Every subject of a whole-classroom assignment, plus each subject assignment. */
     public function subjectIdsTaughtBy(string $userId): array
     {
-        return $this->subjectIds('classroom_teachers', $userId);
+        $whole = DB::table('classroom_teachers as t')
+            ->join('classrooms as c', 'c.id', '=', 't.classroom_id')
+            ->join('classroom_subjects as s', 's.classroom_id', '=', 't.classroom_id')
+            ->where('t.user_id', $userId)
+            ->whereNull('t.subject_id')
+            ->whereNull('c.deactivated_at')
+            ->select('s.subject_id');
+
+        $specific = DB::table('classroom_teachers as t')
+            ->join('classrooms as c', 'c.id', '=', 't.classroom_id')
+            ->join('classroom_subjects as s', static fn ($join) => $join->on('s.classroom_id', '=', 't.classroom_id')->on('s.subject_id', '=', 't.subject_id'))
+            ->where('t.user_id', $userId)
+            ->whereNull('c.deactivated_at')
+            ->select('s.subject_id');
+
+        return $this->ids($whole->union($specific)->pluck('subject_id'));
     }
 
     public function subjectIdsEnrolledBy(string $userId): array
     {
-        return $this->subjectIds('classroom_students', $userId);
+        return $this->ids(DB::table('classroom_students as e')
+            ->join('classrooms as c', 'c.id', '=', 'e.classroom_id')
+            ->join('classroom_subjects as s', 's.classroom_id', '=', 'e.classroom_id')
+            ->where('e.user_id', $userId)
+            ->whereNull('c.deactivated_at')
+            ->distinct()
+            ->pluck('s.subject_id'));
     }
 
-    /** @return list<string> */
-    private function subjectIds(string $pivot, string $userId): array
+    /**
+     * @param  Collection<int, mixed>  $ids
+     * @return list<string>
+     */
+    private function ids(Collection $ids): array
     {
-        /** @var list<string> $ids */
-        $ids = DB::table('classrooms')
-            ->join($pivot, $pivot.'.classroom_id', '=', 'classrooms.id')
-            ->where($pivot.'.user_id', $userId)
-            ->whereNull('classrooms.deactivated_at')
-            ->distinct()
-            ->pluck('classrooms.subject_id')
-            ->map(fn (mixed $id): string => EloquentAttribute::string($id, 'classrooms.subject_id'))
+        return array_values($ids
+            ->map(fn (mixed $id): string => EloquentAttribute::string($id, 'classroom_subjects.subject_id'))
+            ->unique()
             ->values()
-            ->all();
-
-        return $ids;
+            ->all());
     }
 }

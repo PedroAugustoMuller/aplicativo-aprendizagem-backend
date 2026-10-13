@@ -54,9 +54,9 @@ final class ProgressController
         return new JsonResponse(['data' => array_map($this->wrongOf(...), $views)]);
     }
 
-    public function classroom(Request $request, string $id, GetClassroomProgressHandler $handler): JsonResponse
+    public function classroom(Request $request, string $id, string $subjectId, GetClassroomProgressHandler $handler): JsonResponse
     {
-        $view = $handler->handle(new GetClassroomProgressQuery($this->actors->fromRequest($request), $id));
+        $view = $handler->handle(new GetClassroomProgressQuery($this->actors->fromRequest($request), $id, $subjectId));
 
         return new JsonResponse(['data' => ['students' => array_map(static fn (StudentProgressView $s): array => [
             'id' => $s->id,

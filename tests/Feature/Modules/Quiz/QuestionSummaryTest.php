@@ -192,4 +192,19 @@ final class QuestionSummaryTest extends TestCase
         self::assertSame([1, 1], $before);
         self::assertSame([1, 1], [$count($this->classroomUri()), $count($this->subjectUri())]);
     }
+
+    public function test_the_subject_summary_counts_only_classrooms_where_the_teacher_covers_the_subject(): void
+    {
+        $mat = $this->makeSubject('Matemática');
+        $port = $this->makeSubject('Português');
+        $topic = $this->makeTopic($mat, 'Frações');
+        $carlos = $this->makeUser('teacher', 'Carlos');
+        $this->makeClassroomWith([$mat], [[$carlos, $mat]], [$this->makeUser('student', 'A1')], '7º A');
+        $this->makeClassroomWith([$mat, $port], [[$carlos, $port]], [$this->makeUser('student', 'B1'), $this->makeUser('student', 'B2')], '7º B');
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($this->tokenFor($carlos))->getJson("/api/v1/topics/$topic/question-summary")
+            ->assertOk()
+            ->assertJsonPath('data.students', 1);
+    }
 }

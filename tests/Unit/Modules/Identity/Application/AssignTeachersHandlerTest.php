@@ -6,6 +6,7 @@ namespace Tests\Unit\Modules\Identity\Application;
 
 use App\Modules\Identity\Application\Command\AssignTeachers\AssignTeachersCommand;
 use App\Modules\Identity\Application\Command\AssignTeachers\AssignTeachersHandler;
+use App\Modules\Identity\Application\DTO\TeacherAssignmentView;
 use App\Modules\Identity\Domain\Entity\Classroom;
 use App\Modules\Identity\Domain\Entity\User;
 use App\Modules\Identity\Domain\Exception\AccessDeniedException;
@@ -32,7 +33,7 @@ final class AssignTeachersHandlerTest extends TestCase
 
     private const SUBJECT_ID = '0190a2b4-0000-7000-8000-000000000001';
 
-    public function test_an_admin_assigns_two_teachers(): void
+    public function test_an_admin_assigns_a_whole_classroom_and_a_subject_teacher(): void
     {
         $ana = $this->teacher('Ana');
         $root = $this->teacher('Root');
@@ -40,9 +41,15 @@ final class AssignTeachersHandlerTest extends TestCase
         $users = $this->users($ana, $root);
 
         $view = (new AssignTeachersHandler($classrooms, $users))
-            ->handle(new AssignTeachersCommand($this->admin(), self::CLASSROOM_ID, [$ana->id()->value(), $root->id()->value()]));
+            ->handle(new AssignTeachersCommand($this->admin(), self::CLASSROOM_ID, [
+                ['teacherId' => $ana->id()->value(), 'subjectId' => null],
+                ['teacherId' => $root->id()->value(), 'subjectId' => self::SUBJECT_ID],
+            ]));
 
-        self::assertEqualsCanonicalizing([$ana->id()->value(), $root->id()->value()], $view->teacherIds);
+        self::assertEquals([
+            new TeacherAssignmentView($ana->id()->value(), null),
+            new TeacherAssignmentView($root->id()->value(), self::SUBJECT_ID),
+        ], $view->teachers);
     }
 
     public function test_a_student_id_is_not_a_valid_teacher_and_nothing_is_saved(): void
@@ -54,9 +61,9 @@ final class AssignTeachersHandlerTest extends TestCase
         $this->expectException(TeacherNotFoundException::class);
 
         (new AssignTeachersHandler($classrooms, $users))
-            ->handle(new AssignTeachersCommand($this->admin(), self::CLASSROOM_ID, [$student->id()->value()]));
+            ->handle(new AssignTeachersCommand($this->admin(), self::CLASSROOM_ID, [['teacherId' => $student->id()->value(), 'subjectId' => null]]));
 
-        self::assertSame([], $classrooms->findById(new ClassroomId(self::CLASSROOM_ID))?->teacherIds() ?? []);
+        self::assertSame([], $classrooms->findById(new ClassroomId(self::CLASSROOM_ID))?->assignments() ?? []);
     }
 
     public function test_an_unknown_teacher_id_is_not_found(): void
@@ -67,7 +74,7 @@ final class AssignTeachersHandlerTest extends TestCase
         $this->expectException(TeacherNotFoundException::class);
 
         (new AssignTeachersHandler($classrooms, $users))
-            ->handle(new AssignTeachersCommand($this->admin(), self::CLASSROOM_ID, [UserId::random()->value()]));
+            ->handle(new AssignTeachersCommand($this->admin(), self::CLASSROOM_ID, [['teacherId' => UserId::random()->value(), 'subjectId' => null]]));
     }
 
     public function test_a_deactivated_teacher_id_is_not_found(): void
@@ -80,7 +87,7 @@ final class AssignTeachersHandlerTest extends TestCase
         $this->expectException(TeacherNotFoundException::class);
 
         (new AssignTeachersHandler($classrooms, $users))
-            ->handle(new AssignTeachersCommand($this->admin(), self::CLASSROOM_ID, [$teacher->id()->value()]));
+            ->handle(new AssignTeachersCommand($this->admin(), self::CLASSROOM_ID, [['teacherId' => $teacher->id()->value(), 'subjectId' => null]]));
     }
 
     public function test_an_unknown_classroom_is_not_found(): void
@@ -102,7 +109,7 @@ final class AssignTeachersHandlerTest extends TestCase
     private function classroomsWith(): InMemoryClassroomRepository
     {
         $classrooms = $this->classrooms();
-        $classrooms->save(Classroom::create(new ClassroomId(self::CLASSROOM_ID), new ClassroomName('Química 1'), self::SUBJECT_ID));
+        $classrooms->save(Classroom::create(new ClassroomId(self::CLASSROOM_ID), new ClassroomName('Química 1'), [self::SUBJECT_ID]));
 
         return $classrooms;
     }

@@ -51,7 +51,7 @@ final class ClassroomProgressTest extends TestCase
     {
         $this->makeAnsweredAttempt($this->carla, $this->topicId, $this->subjectId, array_fill(0, 5, true), '2026-10-01 10:00');
 
-        $this->getAs('/quiz-progress')
+        $this->getAs('/subjects/'.$this->subjectId.'/quiz-progress')
             ->assertOk()
             ->assertJsonPath('data.students.0.name', 'Ana')
             ->assertJsonPath('data.students.0.topics', [])
@@ -65,7 +65,7 @@ final class ClassroomProgressTest extends TestCase
         $count = function (): int {
             DB::flushQueryLog();
             DB::enableQueryLog();
-            $this->getAs('/quiz-progress')->assertOk();
+            $this->getAs('/subjects/'.$this->subjectId.'/quiz-progress')->assertOk();
             // Only the quiz tables: auth queries vary with the guard's cache between requests.
             $n = count(array_filter(DB::getQueryLog(), static fn (array $q): bool => str_contains($q['query'], 'quiz_')));
             DB::disableQueryLog();
@@ -121,16 +121,42 @@ final class ClassroomProgressTest extends TestCase
     {
         $outsider = EloquentAttribute::string($this->makeUser('student', 'Fora')->getKey(), 'users.id');
 
-        $this->getAs('/quiz-progress', $this->makeUser('teacher', 'Outro'))->assertForbidden()->assertJsonPath('error.code', 'auth.forbidden');
-        $this->getAs('/quiz-progress', $this->makeUser('admin', 'Ana Admin'))->assertOk();
+        $this->getAs('/subjects/'.$this->subjectId.'/quiz-progress', $this->makeUser('teacher', 'Outro'))->assertForbidden()->assertJsonPath('error.code', 'auth.forbidden');
+        $this->getAs('/subjects/'.$this->subjectId.'/quiz-progress', $this->makeUser('admin', 'Ana Admin'))->assertOk();
         $this->getAs("/students/{$outsider}/topics/{$this->topicId}/quiz-history")->assertNotFound()->assertJsonPath('error.code', 'quiz.student_not_found');
-        $this->getAs('/quiz-progress', classroomId: '0192f0a0-0000-7000-8000-00000000dead')->assertNotFound()->assertJsonPath('error.code', 'quiz.classroom_not_found');
+        $this->getAs('/subjects/'.$this->subjectId.'/quiz-progress', classroomId: '0192f0a0-0000-7000-8000-00000000dead')->assertNotFound()->assertJsonPath('error.code', 'quiz.classroom_not_found');
     }
 
     public function test_a_deactivated_classroom_stays_readable(): void
     {
         DB::table('classrooms')->where('id', $this->classroomId)->update(['deactivated_at' => now()]);
 
-        $this->getAs('/quiz-progress')->assertOk()->assertJsonCount(2, 'data.students');
+        $this->getAs('/subjects/'.$this->subjectId.'/quiz-progress')->assertOk()->assertJsonCount(2, 'data.students');
+    }
+
+    public function test_the_grid_is_per_subject_and_follows_the_teachers_assignment(): void
+    {
+        $mat = $this->makeSubject('Matemática');
+        $port = $this->makeSubject('Português');
+        $matTopic = $this->makeTopic($mat, 'Frações');
+        $portTopic = $this->makeTopic($port, 'Crase');
+        $bia = $this->makeUser('student', 'Bia');
+        $carlos = $this->makeUser('teacher', 'Carlos');
+        $ana = $this->makeUser('teacher', 'Ana');
+        $id = $this->makeClassroomWith([$mat, $port], [[$carlos, $mat], [$ana, null]], [$bia], '7º A');
+        $this->makeAnsweredAttempt($this->userId($bia), $matTopic, $mat, [true], '2026-10-01 10:00:00');
+        $this->makeAnsweredAttempt($this->userId($bia), $portTopic, $port, [true], '2026-10-01 11:00:00');
+
+        $this->getAs("/subjects/$mat/quiz-progress", $carlos, $id)
+            ->assertOk()
+            ->assertJsonPath('data.students.0.topics.0.topic_id', $matTopic)
+            ->assertJsonCount(1, 'data.students.0.topics');
+        $this->getAs("/subjects/$port/quiz-progress", $carlos, $id)->assertForbidden();
+        $this->getAs("/subjects/$port/quiz-progress", $ana, $id)
+            ->assertOk()
+            ->assertJsonPath('data.students.0.topics.0.topic_id', $portTopic);
+        $this->getAs('/subjects/'.$this->makeSubject('História').'/quiz-progress', $ana, $id)
+            ->assertNotFound()
+            ->assertJsonPath('error.code', 'quiz.classroom_not_found');
     }
 }

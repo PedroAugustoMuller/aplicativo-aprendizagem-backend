@@ -21,6 +21,8 @@
         "identity.classroom.enrolment_requires_active_student",
         "identity.classroom.name_already_taken",
         "identity.classroom.subject_inactive",
+        "identity.classroom.subject_not_assigned",
+        "identity.classroom.teacher_assignment_redundant",
         "identity.classroom_not_found",
         "identity.current_password_invalid",
         "identity.email_already_taken",

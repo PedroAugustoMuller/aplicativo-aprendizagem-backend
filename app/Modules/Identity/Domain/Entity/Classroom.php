@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Domain\Entity;
 
+use App\Modules\Identity\Domain\Exception\ClassroomSubjectNotAssignedException;
+use App\Modules\Identity\Domain\Exception\ClassroomTeacherAssignmentRedundantException;
 use App\Modules\Identity\Domain\Exception\EnrolmentRequiresActiveStudentException;
 use App\Modules\Identity\Domain\ValueObject\ClassroomId;
 use App\Modules\Identity\Domain\ValueObject\ClassroomName;
+use App\Modules\Identity\Domain\ValueObject\TeachingAssignment;
 use App\Modules\Identity\Domain\ValueObject\UserId;
 use App\Shared\Domain\Auth\Role;
 use DateTimeImmutable;
@@ -29,34 +32,39 @@ final class Classroom
 
     private bool $teachersChanged = false;
 
+    private bool $subjectsChanged = false;
+
     private bool $detailsChanged = false;
 
     /**
-     * @param  array<string, UserId>  $teachers  keyed by id value
+     * @param  array<string, string>  $subjectIds  keyed by itself
+     * @param  array<string, TeachingAssignment>  $assignments  keyed by TeachingAssignment::key()
      * @param  array<string, UserId>  $students  keyed by id value
      */
     private function __construct(
         private readonly ClassroomId $id,
         private ClassroomName $name,
-        private string $subjectId,
-        private array $teachers,
+        private array $subjectIds,
+        private array $assignments,
         private array $students,
         private ?DateTimeImmutable $deactivatedAt,
         private readonly bool $isNew,
     ) {}
 
-    public static function create(ClassroomId $id, ClassroomName $name, string $subjectId): self
+    /** @param  list<string>  $subjectIds */
+    public static function create(ClassroomId $id, ClassroomName $name, array $subjectIds): self
     {
-        return new self($id, $name, $subjectId, [], [], null, true);
+        return new self($id, $name, self::subjectSet($subjectIds), [], [], null, true);
     }
 
     /**
-     * @param  list<UserId>  $teacherIds
+     * @param  list<string>  $subjectIds
+     * @param  list<TeachingAssignment>  $assignments
      * @param  list<UserId>  $studentIds
      */
-    public static function restore(ClassroomId $id, ClassroomName $name, string $subjectId, array $teacherIds, array $studentIds, ?DateTimeImmutable $deactivatedAt): self
+    public static function restore(ClassroomId $id, ClassroomName $name, array $subjectIds, array $assignments, array $studentIds, ?DateTimeImmutable $deactivatedAt): self
     {
-        return new self($id, $name, $subjectId, self::index($teacherIds), self::index($studentIds), $deactivatedAt, false);
+        return new self($id, $name, self::subjectSet($subjectIds), self::assignmentSet($assignments), self::index($studentIds), $deactivatedAt, false);
     }
 
     public function id(): ClassroomId
@@ -69,15 +77,21 @@ final class Classroom
         return $this->name;
     }
 
-    public function subjectId(): string
+    /** @return list<string> */
+    public function subjectIds(): array
     {
-        return $this->subjectId;
+        return array_values($this->subjectIds);
     }
 
-    /** @return list<UserId> */
-    public function teacherIds(): array
+    public function hasSubject(string $subjectId): bool
     {
-        return array_values($this->teachers);
+        return isset($this->subjectIds[$subjectId]);
+    }
+
+    /** @return list<TeachingAssignment> */
+    public function assignments(): array
+    {
+        return array_values($this->assignments);
     }
 
     /** @return list<UserId> */
@@ -102,22 +116,57 @@ final class Classroom
         $this->detailsChanged = true;
     }
 
-    public function changeSubject(string $subjectId): void
+    /**
+     * Assignments to a subject that leaves the classroom go with it.
+     *
+     * @param  list<string>  $subjectIds
+     */
+    public function replaceSubjects(array $subjectIds): void
     {
-        $this->subjectId = $subjectId;
-        $this->detailsChanged = true;
+        $this->subjectIds = self::subjectSet($subjectIds);
+        $this->subjectsChanged = true;
+
+        $kept = array_filter(
+            $this->assignments,
+            fn (TeachingAssignment $a): bool => $a->subjectId === null || $this->hasSubject($a->subjectId),
+        );
+
+        if (count($kept) !== count($this->assignments)) {
+            $this->assignments = $kept;
+            $this->teachersChanged = true;
+        }
     }
 
-    /** @param  list<User>  $teachers */
-    public function assignTeachers(array $teachers): void
+    /** @param  list<array{0: User, 1: ?string}>  $assignments  teacher and subject (null: whole classroom) */
+    public function replaceAssignments(array $assignments): void
     {
-        foreach ($teachers as $teacher) {
+        $next = [];
+        $whole = [];
+
+        foreach ($assignments as [$teacher, $subjectId]) {
             if (! $teacher->role()->isStaff()) {
                 throw new InvalidArgumentException('Only staff can teach a classroom.');
             }
+
+            if ($subjectId !== null && ! $this->hasSubject($subjectId)) {
+                throw new ClassroomSubjectNotAssignedException;
+            }
+
+            $assignment = new TeachingAssignment($teacher->id(), $subjectId);
+            $next[$assignment->key()] = $assignment;
+
+            if ($subjectId === null) {
+                $whole[$teacher->id()->value()] = true;
+            }
         }
 
-        $this->teachers = self::index(array_map(fn (User $t): UserId => $t->id(), $teachers));
+        foreach ($next as $assignment) {
+            if (! $assignment->isWholeClassroom() && isset($whole[$assignment->teacherId->value()])) {
+                throw new ClassroomTeacherAssignmentRedundantException;
+            }
+        }
+
+        $this->assignments = $next;
         $this->teachersChanged = true;
     }
 
@@ -140,9 +189,31 @@ final class Classroom
         $this->unenrolled[$key] = $studentId;
     }
 
+    /** Any assignment: may open the classroom and manage its roster. */
     public function isTaughtBy(UserId $userId): bool
     {
-        return isset($this->teachers[$userId->value()]);
+        foreach ($this->assignments as $assignment) {
+            if ($assignment->teacherId->equals($userId)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function teaches(UserId $userId, string $subjectId): bool
+    {
+        if (! $this->hasSubject($subjectId)) {
+            return false;
+        }
+
+        foreach ($this->assignments as $assignment) {
+            if ($assignment->teacherId->equals($userId) && ($assignment->isWholeClassroom() || $assignment->subjectId === $subjectId)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function hasStudent(UserId $userId): bool
@@ -165,13 +236,19 @@ final class Classroom
         return $this->isNew;
     }
 
-    /** Name, subject or deactivation changed since it was loaded. */
+    /** Name or deactivation changed since it was loaded. */
     public function detailsChanged(): bool
     {
         return $this->detailsChanged;
     }
 
-    /** The teacher list was replaced since it was loaded. */
+    /** The subject list was replaced since it was loaded. */
+    public function subjectsChanged(): bool
+    {
+        return $this->subjectsChanged;
+    }
+
+    /** The assignments were replaced (or lost to a removed subject) since it was loaded. */
     public function teachersChanged(): bool
     {
         return $this->teachersChanged;
@@ -187,6 +264,34 @@ final class Classroom
     public function unenrolledStudentIds(): array
     {
         return array_values($this->unenrolled);
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return array<string, string>
+     */
+    private static function subjectSet(array $ids): array
+    {
+        $set = [];
+        foreach ($ids as $id) {
+            $set[$id] = $id;
+        }
+
+        return $set;
+    }
+
+    /**
+     * @param  list<TeachingAssignment>  $assignments
+     * @return array<string, TeachingAssignment>
+     */
+    private static function assignmentSet(array $assignments): array
+    {
+        $set = [];
+        foreach ($assignments as $assignment) {
+            $set[$assignment->key()] = $assignment;
+        }
+
+        return $set;
     }
 
     /**

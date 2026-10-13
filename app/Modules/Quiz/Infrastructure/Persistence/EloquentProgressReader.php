@@ -21,9 +21,9 @@ final class EloquentProgressReader implements ProgressReader
 {
     public function __construct(private readonly AttemptMapper $mapper) {}
 
-    public function answersForTopic(string $studentId, string $topicId, ?string $subjectId): array
+    public function answersForTopic(string $studentId, string $topicId, ?array $subjectIds): array
     {
-        $rows = $this->graded($subjectId)
+        $rows = $this->graded($subjectIds)
             ->where('a.student_id', $studentId)
             ->where('a.topic_id', $topicId)
             ->get();
@@ -35,7 +35,7 @@ final class EloquentProgressReader implements ProgressReader
     {
         $grouped = [];
 
-        foreach ($this->graded($subjectId)->where('a.student_id', $studentId)->get() as $row) {
+        foreach ($this->graded([$subjectId])->where('a.student_id', $studentId)->get() as $row) {
             $grouped[EloquentAttribute::string($row->topic_id, 'quiz_attempts.topic_id')][] = $this->scored($row);
         }
 
@@ -50,7 +50,7 @@ final class EloquentProgressReader implements ProgressReader
 
         $grouped = [];
 
-        foreach ($this->graded($subjectId)->whereIn('a.student_id', $studentIds)->get() as $row) {
+        foreach ($this->graded([$subjectId])->whereIn('a.student_id', $studentIds)->get() as $row) {
             $student = EloquentAttribute::string($row->student_id, 'quiz_attempts.student_id');
             $topic = EloquentAttribute::string($row->topic_id, 'quiz_attempts.topic_id');
             $grouped[$student][$topic][] = $this->scored($row);
@@ -59,7 +59,7 @@ final class EloquentProgressReader implements ProgressReader
         return $grouped;
     }
 
-    public function attemptsForTopic(string $studentId, string $topicId, ?string $subjectId): array
+    public function attemptsForTopic(string $studentId, string $topicId, ?array $subjectIds): array
     {
         $query = DB::table('quiz_attempts as a')
             ->leftJoin('quiz_attempt_questions as q', 'q.attempt_id', '=', 'a.id')
@@ -72,8 +72,8 @@ final class EloquentProgressReader implements ProgressReader
             ->selectRaw('count(q.is_correct) as answered')
             ->selectRaw('count(*) filter (where q.is_correct) as correct');
 
-        if ($subjectId !== null) {
-            $query->where('a.subject_id', $subjectId);
+        if ($subjectIds !== null) {
+            $query->whereIn('a.subject_id', $subjectIds);
         }
 
         $summaries = [];
@@ -92,9 +92,9 @@ final class EloquentProgressReader implements ProgressReader
         return $summaries;
     }
 
-    public function answeredQuestions(string $studentId, string $topicId, ?string $subjectId): array
+    public function answeredQuestions(string $studentId, string $topicId, ?array $subjectIds): array
     {
-        $query = $this->graded($subjectId)
+        $query = $this->graded($subjectIds)
             ->where('a.student_id', $studentId)
             ->where('a.topic_id', $topicId)
             ->whereNotNull('q.question_id')
@@ -126,7 +126,7 @@ final class EloquentProgressReader implements ProgressReader
             return [];
         }
 
-        $query = $this->graded($subjectId)
+        $query = $this->graded([$subjectId])
             ->whereIn('a.student_id', $studentIds)
             ->where('a.topic_id', $topicId)
             ->whereNotNull('q.question_id')
@@ -153,7 +153,8 @@ final class EloquentProgressReader implements ProgressReader
         return $answers;
     }
 
-    private function graded(?string $subjectId): Builder
+    /** @param  list<string>|null  $subjectIds */
+    private function graded(?array $subjectIds): Builder
     {
         $query = DB::table('quiz_attempt_questions as q')
             ->join('quiz_attempts as a', 'a.id', '=', 'q.attempt_id')
@@ -162,8 +163,8 @@ final class EloquentProgressReader implements ProgressReader
             ->orderBy('q.position')
             ->select(['q.id', 'q.attempt_id', 'q.position', 'q.is_correct', 'q.answered_at', 'a.student_id', 'a.topic_id']);
 
-        if ($subjectId !== null) {
-            $query->where('a.subject_id', $subjectId);
+        if ($subjectIds !== null) {
+            $query->whereIn('a.subject_id', $subjectIds);
         }
 
         return $query;
