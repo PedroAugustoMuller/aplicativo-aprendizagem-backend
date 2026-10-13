@@ -9,6 +9,7 @@ use App\Modules\Identity\Application\Port\PasswordHasher;
 use App\Modules\Identity\Application\Port\TokenRevoker;
 use App\Modules\Identity\Application\Port\TransactionManager;
 use App\Modules\Identity\Domain\Exception\CurrentPasswordInvalidException;
+use App\Modules\Identity\Domain\Exception\NewPasswordUnchangedException;
 use App\Modules\Identity\Domain\Repository\UserRepository;
 use App\Modules\Identity\Domain\ValueObject\UserId;
 use RuntimeException;
@@ -28,8 +29,16 @@ final readonly class ChangePasswordHandler
         $id = new UserId($command->userId);
         $user = $this->users->findById($id) ?? throw new RuntimeException('Authenticated user no longer exists.');
 
-        if (! $this->hasher->verify($command->currentPassword, $user->password())) {
+        // A pending user just proved the temporary password at login, and the
+        // token can do nothing but this change, so asking again adds nothing.
+        if (! $user->mustChangePassword()
+            && ($command->currentPassword === null || ! $this->hasher->verify($command->currentPassword, $user->password()))) {
             throw new CurrentPasswordInvalidException;
+        }
+
+        // Checked after the current password: before it, this would confirm a guess.
+        if ($this->hasher->verify($command->newPassword, $user->password())) {
+            throw new NewPasswordUnchangedException;
         }
 
         $user->changePassword($this->hasher->hash($command->newPassword));

@@ -25,6 +25,7 @@
         "identity.current_password_invalid",
         "identity.email_already_taken",
         "identity.invalid_credentials",
+        "identity.new_password_unchanged",
         "identity.password_change_required",
         "identity.student_not_found",
         "identity.teacher_not_found",

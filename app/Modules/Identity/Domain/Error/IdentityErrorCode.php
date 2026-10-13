@@ -12,6 +12,7 @@ enum IdentityErrorCode: string implements ErrorCode
     case AccountDeactivated = 'identity.account_deactivated';
     case PasswordChangeRequired = 'identity.password_change_required';
     case CurrentPasswordInvalid = 'identity.current_password_invalid';
+    case NewPasswordUnchanged = 'identity.new_password_unchanged';
     case ClassroomNotFound = 'identity.classroom_not_found';
     case ClassroomNameAlreadyTaken = 'identity.classroom.name_already_taken';
     case ClassroomSubjectInactive = 'identity.classroom.subject_inactive';

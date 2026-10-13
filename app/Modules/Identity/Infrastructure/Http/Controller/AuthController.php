@@ -79,7 +79,7 @@ final class AuthController
 
         $handler->handle(new ChangePasswordCommand(
             userId: EloquentAttribute::string($user->getKey(), 'users.id'),
-            currentPassword: (string) $request->string('current_password'),
+            currentPassword: $request->filled('current_password') ? (string) $request->string('current_password') : null,
             newPassword: (string) $request->string('new_password'),
             currentTokenId: (string) $tokenKey,
         ));
