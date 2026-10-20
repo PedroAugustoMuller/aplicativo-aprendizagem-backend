@@ -54,9 +54,18 @@ final readonly class SuggestionPrompt
         return implode("\n", $lines);
     }
 
-    /** A pasted "</source>" must not end the data early and smuggle in instructions. */
+    /**
+     * A pasted "</source>" must not end the data early and smuggle in instructions.
+     * Repeated until nothing changes: removing one tag must not join "</sour" and
+     * "ce>" into a new one.
+     */
     private static function withoutDelimiters(string $text): string
     {
-        return trim((string) preg_replace('~</?\s*source\s*>~i', '', $text));
+        do {
+            $before = $text;
+            $text = (string) preg_replace('~</?\s*source\s*>~i', '', $text);
+        } while ($text !== $before);
+
+        return trim($text);
     }
 }

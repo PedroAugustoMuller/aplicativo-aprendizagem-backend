@@ -213,6 +213,42 @@ final class QuestionSuggestionsTest extends TestCase
         $this->withToken($this->tokenFor($admin))->postJson($this->url(), $this->body())->assertStatus(429);
     }
 
+    public function test_failed_generations_do_not_spend_the_teachers_own_limit(): void
+    {
+        config(['services.ai.limits.per_user_hour' => 1]);
+        $this->app->instance(QuestionGenerator::class, new class implements QuestionGenerator
+        {
+            public function generate(SuggestionRequest $request): array
+            {
+                throw new SuggestionsUnavailableException('quota');
+            }
+        });
+
+        $this->asTeacher()->postJson($this->url(), $this->body())->assertStatus(503);
+        $this->asTeacher()->postJson($this->url(), $this->body())->assertStatus(503);
+        $this->asTeacher()->postJson($this->url(), ['count' => 99])->assertStatus(422);
+
+        $this->stub([new QuestionSuggestion(QuestionType::TrueFalse, 'Ok.', null, [], true)]);
+        $this->asTeacher()->postJson($this->url(), $this->body())->assertOk();
+        $this->asTeacher()->postJson($this->url(), $this->body())->assertStatus(429);
+    }
+
+    public function test_provider_failures_still_count_for_the_whole_school(): void
+    {
+        config(['services.ai.limits.global_day' => 1]);
+        $this->app->instance(QuestionGenerator::class, new class implements QuestionGenerator
+        {
+            public function generate(SuggestionRequest $request): array
+            {
+                throw new SuggestionsUnavailableException('quota');
+            }
+        });
+
+        $this->asTeacher()->postJson($this->url(), ['count' => 99])->assertStatus(422);
+        $this->asTeacher()->postJson($this->url(), $this->body())->assertStatus(503);
+        $this->asTeacher()->postJson($this->url(), $this->body())->assertStatus(429);
+    }
+
     public function test_a_success_is_logged_without_the_source_text(): void
     {
         $spy = Log::spy();
