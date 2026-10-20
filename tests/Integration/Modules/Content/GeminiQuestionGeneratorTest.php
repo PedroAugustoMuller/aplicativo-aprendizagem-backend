@@ -40,8 +40,7 @@ final class GeminiQuestionGeneratorTest extends TestCase
                 && ! str_contains($request->url(), 'CHAVE')
                 && data_get($body, 'generationConfig.responseMimeType') === 'application/json'
                 && data_get($body, 'generationConfig.responseSchema.properties.questions.type') === 'ARRAY'
-                && str_contains(self::text($body, 'systemInstruction.parts.0.text'), 'Brazilian Portuguese')
-                && str_contains(self::text($body, 'contents.0.parts.0.text'), "<source>\nO sódio reage com a água.\n</source>");
+                && str_contains(self::text($body, 'systemInstruction.parts.0.text'), 'Brazilian Portuguese');
         });
     }
 
@@ -64,6 +63,32 @@ final class GeminiQuestionGeneratorTest extends TestCase
         self::assertTrue($suggestions[0]->options[0]->correct);
         self::assertSame(QuestionType::TrueFalse, $suggestions[1]->type);
         self::assertTrue($suggestions[1]->answer);
+    }
+
+    public function test_the_material_goes_as_its_own_part_never_inside_the_instructions(): void
+    {
+        Http::fake([self::URL => Http::response($this->answer(['questions' => []]))]);
+
+        $this->generator()->generate($this->request());
+
+        Http::assertSent(function (Request $request): bool {
+            $body = $request->data();
+
+            return data_get($body, 'contents.0.parts.0.inlineData.mimeType') === 'text/plain'
+                && base64_decode(self::text($body, 'contents.0.parts.0.inlineData.data'), true) === 'O sódio reage com a água.'
+                && str_contains(self::text($body, 'contents.0.parts.1.text'), 'Tabela Periódica')
+                && ! str_contains(self::text($body, 'contents.0.parts.1.text'), 'sódio');
+        });
+    }
+
+    public function test_without_material_only_the_instructions_are_sent(): void
+    {
+        Http::fake([self::URL => Http::response($this->answer(['questions' => []]))]);
+
+        $this->generator()->generate($this->request(material: null));
+
+        Http::assertSent(fn (Request $request): bool => is_string(data_get($request->data(), 'contents.0.parts.0.text'))
+            && data_get($request->data(), 'contents.0.parts.1') === null);
     }
 
     /** @return iterable<string, array{0: callable(): mixed}> */
@@ -114,11 +139,11 @@ final class GeminiQuestionGeneratorTest extends TestCase
         return $this->app->make(GeminiQuestionGenerator::class);
     }
 
-    private function request(): SuggestionRequest
+    private function request(?string $material = 'O sódio reage com a água.'): SuggestionRequest
     {
         return new SuggestionRequest(
             'Química', 'Tabela Periódica', '', 2, [QuestionType::MultipleChoice, QuestionType::TrueFalse],
-            SuggestionDifficulty::Medium, null, 'O sódio reage com a água.',
+            SuggestionDifficulty::Medium, null, $material,
         );
     }
 

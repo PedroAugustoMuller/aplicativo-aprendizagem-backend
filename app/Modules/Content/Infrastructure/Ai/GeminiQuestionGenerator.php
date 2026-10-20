@@ -63,7 +63,7 @@ final readonly class GeminiQuestionGenerator implements QuestionGenerator
                 ->timeout(Config::integer('services.gemini.timeout'))
                 ->post(sprintf(self::ENDPOINT, rawurlencode(Config::string('services.gemini.model'))), [
                     'systemInstruction' => ['parts' => [['text' => $this->prompt->system()]]],
-                    'contents' => [['role' => 'user', 'parts' => [['text' => $this->prompt->user($request)]]]],
+                    'contents' => [['role' => 'user', 'parts' => $this->parts($request)]],
                     'generationConfig' => [
                         'responseMimeType' => 'application/json',
                         'responseSchema' => self::SCHEMA,
@@ -87,6 +87,19 @@ final readonly class GeminiQuestionGenerator implements QuestionGenerator
         }
 
         return SuggestionPayload::questions($items);
+    }
+
+    /** @return list<array<string, mixed>> the material (if any) as its own plain-text part, then the instructions */
+    private function parts(SuggestionRequest $request): array
+    {
+        $material = $this->prompt->material($request);
+        $instructions = ['text' => $this->prompt->user($request)];
+
+        if ($material === null) {
+            return [$instructions];
+        }
+
+        return [['inlineData' => ['mimeType' => 'text/plain', 'data' => base64_encode($material)]], $instructions];
     }
 
     /** Sizes and timings only: never the material, never the key. */

@@ -76,7 +76,7 @@ final readonly class ClaudeQuestionGenerator implements QuestionGenerator
                     'model' => Config::string('services.claude.model'),
                     'max_tokens' => self::MAX_TOKENS,
                     'system' => $this->prompt->system(),
-                    'messages' => [['role' => 'user', 'content' => $this->prompt->user($request)]],
+                    'messages' => [['role' => 'user', 'content' => $this->content($request)]],
                     'tools' => [[
                         'name' => self::TOOL,
                         'description' => 'Submit the quiz questions you wrote.',
@@ -122,6 +122,26 @@ final readonly class ClaudeQuestionGenerator implements QuestionGenerator
         }
 
         return null;
+    }
+
+    /** @return list<array<string, mixed>> the material (if any) as its own document, then the instructions */
+    private function content(SuggestionRequest $request): array
+    {
+        $material = $this->prompt->material($request);
+        $instructions = ['type' => 'text', 'text' => $this->prompt->user($request)];
+
+        if ($material === null) {
+            return [$instructions];
+        }
+
+        return [
+            [
+                'type' => 'document',
+                'source' => ['type' => 'text', 'media_type' => 'text/plain', 'data' => $material],
+                'title' => SuggestionPrompt::MATERIAL_TITLE,
+            ],
+            $instructions,
+        ];
     }
 
     /** Sizes and timings only: never the material, never the key. */

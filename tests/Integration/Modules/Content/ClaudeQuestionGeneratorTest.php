@@ -47,8 +47,7 @@ final class ClaudeQuestionGeneratorTest extends TestCase
                 && data_get($body, 'tool_choice.name') === 'submit_questions'
                 && data_get($body, 'tools.0.name') === 'submit_questions'
                 && data_get($body, 'tools.0.input_schema.properties.questions.type') === 'array'
-                && str_contains(self::text($body, 'system'), 'Brazilian Portuguese')
-                && str_contains(self::text($body, 'messages.0.content'), "<source>\nO sódio reage com a água.\n</source>");
+                && str_contains(self::text($body, 'system'), 'Brazilian Portuguese');
         });
     }
 
@@ -71,6 +70,35 @@ final class ClaudeQuestionGeneratorTest extends TestCase
         self::assertTrue($suggestions[0]->options[0]->correct);
         self::assertSame(QuestionType::TrueFalse, $suggestions[1]->type);
         self::assertTrue($suggestions[1]->answer);
+    }
+
+    public function test_the_material_goes_as_its_own_document_block_never_inside_the_instructions(): void
+    {
+        Http::fake([self::URL => Http::response($this->answer([]))]);
+
+        $this->generator()->generate($this->request());
+
+        Http::assertSent(function (Request $request): bool {
+            $body = $request->data();
+
+            return data_get($body, 'messages.0.content.0.type') === 'document'
+                && data_get($body, 'messages.0.content.0.source.type') === 'text'
+                && data_get($body, 'messages.0.content.0.source.media_type') === 'text/plain'
+                && data_get($body, 'messages.0.content.0.source.data') === 'O sódio reage com a água.'
+                && data_get($body, 'messages.0.content.0.title') === 'Material de base'
+                && data_get($body, 'messages.0.content.1.type') === 'text'
+                && ! str_contains(self::text($body, 'messages.0.content.1.text'), 'sódio');
+        });
+    }
+
+    public function test_without_material_only_the_instructions_are_sent(): void
+    {
+        Http::fake([self::URL => Http::response($this->answer([]))]);
+
+        $this->generator()->generate($this->request(material: null));
+
+        Http::assertSent(fn (Request $request): bool => data_get($request->data(), 'messages.0.content.0.type') === 'text'
+            && data_get($request->data(), 'messages.0.content.1') === null);
     }
 
     /** @return iterable<string, array{0: callable(): mixed}> */
@@ -129,11 +157,11 @@ final class ClaudeQuestionGeneratorTest extends TestCase
         return $this->app->make(ClaudeQuestionGenerator::class);
     }
 
-    private function request(): SuggestionRequest
+    private function request(?string $material = 'O sódio reage com a água.'): SuggestionRequest
     {
         return new SuggestionRequest(
             'Química', 'Tabela Periódica', '', 2, [QuestionType::MultipleChoice, QuestionType::TrueFalse],
-            SuggestionDifficulty::Medium, null, 'O sódio reage com a água.',
+            SuggestionDifficulty::Medium, null, $material,
         );
     }
 
