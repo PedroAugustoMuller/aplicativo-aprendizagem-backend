@@ -17,6 +17,9 @@ enum ContentErrorCode: string implements ErrorCode
     case QuestionNotFound = 'content.question_not_found';
     case QuestionInvalidOptions = 'content.question.invalid_options';
     case QuestionEditedElsewhere = 'content.question.edited_elsewhere';
+    case SuggestionsDisabled = 'content.suggestions.disabled';
+    case SuggestionsUnavailable = 'content.suggestions.unavailable';
+    case SuggestionsEmpty = 'content.suggestions.empty';
 
     public function code(): string
     {
