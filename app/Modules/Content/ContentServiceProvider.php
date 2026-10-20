@@ -13,6 +13,7 @@ use App\Modules\Content\Domain\Repository\SubjectRepository;
 use App\Modules\Content\Domain\Repository\TopicRepository;
 use App\Modules\Content\Infrastructure\Ai\DisabledQuestionGenerator;
 use App\Modules\Content\Infrastructure\Ai\FakeQuestionGenerator;
+use App\Modules\Content\Infrastructure\Ai\GeminiQuestionGenerator;
 use App\Modules\Content\Infrastructure\Contract\EloquentQuestionBank;
 use App\Modules\Content\Infrastructure\Contract\EloquentSubjectCatalog;
 use App\Modules\Content\Infrastructure\Persistence\EloquentQuestionBankReader;
@@ -43,7 +44,7 @@ final class ContentServiceProvider extends ServiceProvider
 
         // Resolved per request from config, so tests (and a changed .env) pick the provider.
         $this->app->bind(QuestionGenerator::class, static fn (Application $app): QuestionGenerator => match (AiSuggestions::provider()) {
-            'gemini' => new DisabledQuestionGenerator, // Task 8 replaces this arm
+            'gemini' => $app->make(GeminiQuestionGenerator::class),
             'fake' => new FakeQuestionGenerator,
             default => new DisabledQuestionGenerator,
         });
