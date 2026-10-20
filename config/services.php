@@ -37,4 +37,22 @@ return [
         ],
     ],
 
+    // "Gerar com IA". Empty provider = feature off (route answers
+    // content.suggestions.disabled, /auth/me says ai_suggestions: false).
+    'ai' => [
+        'provider' => env('AI_PROVIDER', ''),
+        'limits' => [
+            'per_user_hour' => (int) env('AI_LIMIT_PER_USER_HOUR', 10),
+            'per_user_day' => (int) env('AI_LIMIT_PER_USER_DAY', 30),
+            'global_day' => (int) env('AI_LIMIT_GLOBAL_DAY', 200),
+        ],
+    ],
+
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY', ''),
+        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        // Under nginx's 60 s fastcgi_read_timeout and PHP's 60 s max_execution_time.
+        'timeout' => 45,
+    ],
+
 ];

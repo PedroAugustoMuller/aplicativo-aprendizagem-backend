@@ -9,6 +9,7 @@ use App\Shared\Infrastructure\Error\ErrorCodeRegistry;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use UnitEnum;
@@ -76,6 +77,19 @@ class AppServiceProvider extends ServiceProvider
             $identifier = $request->user()?->getAuthIdentifier();
 
             return Limit::perMinute(5)->by('password|'.(is_string($identifier) ? $identifier : $request->ip()));
+        });
+
+        // "Gerar com IA" spends a provider's free quota: a per-user hour and day
+        // bucket, plus one bucket for the whole school kept under the free tier.
+        RateLimiter::for('ai-suggestions', function (Request $request): array {
+            $identifier = $request->user()?->getAuthIdentifier();
+            $user = is_string($identifier) ? $identifier : (string) $request->ip();
+
+            return [
+                Limit::perHour(Config::integer('services.ai.limits.per_user_hour'))->by('ai-hour|'.$user),
+                Limit::perDay(Config::integer('services.ai.limits.per_user_day'))->by('ai-day|'.$user),
+                Limit::perDay(Config::integer('services.ai.limits.global_day'))->by('ai-global'),
+            ];
         });
     }
 }
