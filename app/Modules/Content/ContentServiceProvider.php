@@ -11,6 +11,7 @@ use App\Modules\Content\Application\Query\ListTopics\TopicListReader;
 use App\Modules\Content\Domain\Repository\QuestionRepository;
 use App\Modules\Content\Domain\Repository\SubjectRepository;
 use App\Modules\Content\Domain\Repository\TopicRepository;
+use App\Modules\Content\Infrastructure\Ai\ClaudeQuestionGenerator;
 use App\Modules\Content\Infrastructure\Ai\DisabledQuestionGenerator;
 use App\Modules\Content\Infrastructure\Ai\FakeQuestionGenerator;
 use App\Modules\Content\Infrastructure\Ai\GeminiQuestionGenerator;
@@ -44,6 +45,7 @@ final class ContentServiceProvider extends ServiceProvider
 
         // Resolved per request from config, so tests (and a changed .env) pick the provider.
         $this->app->bind(QuestionGenerator::class, static fn (Application $app): QuestionGenerator => match (AiSuggestions::provider()) {
+            'claude' => $app->make(ClaudeQuestionGenerator::class),
             'gemini' => $app->make(GeminiQuestionGenerator::class),
             'fake' => new FakeQuestionGenerator,
             default => new DisabledQuestionGenerator,

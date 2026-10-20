@@ -48,9 +48,18 @@ return [
         ],
     ],
 
+    'claude' => [
+        'key' => env('ANTHROPIC_API_KEY', ''),
+        // The cheapest current model; claude-sonnet-5-5 writes better questions at a higher price.
+        'model' => env('CLAUDE_MODEL', 'claude-haiku-5-5'),
+        // Under nginx's 60 s fastcgi_read_timeout and PHP's 60 s max_execution_time.
+        'timeout' => 45,
+    ],
+
     'gemini' => [
         'key' => env('GEMINI_API_KEY', ''),
-        'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+        // An alias Google moves to its current Flash: gemini-2.5-flash was retired for new keys in 2026.
+        'model' => env('GEMINI_MODEL', 'gemini-flash-latest'),
         // Under nginx's 60 s fastcgi_read_timeout and PHP's 60 s max_execution_time.
         'timeout' => 45,
     ],

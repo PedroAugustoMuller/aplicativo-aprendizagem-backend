@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Config;
  */
 final class AiSuggestions
 {
-    public const PROVIDERS = ['gemini', 'fake'];
+    public const PROVIDERS = ['claude', 'gemini', 'fake'];
 
     public static function provider(): string
     {
