@@ -7,6 +7,7 @@ namespace Tests\Feature\Shared;
 use App\Modules\Identity\Database\Seeders\DevelopmentAccountsSeeder;
 use App\Shared\Domain\Exception\BusinessRuleException;
 use App\Shared\Domain\Exception\ForbiddenException;
+use App\Shared\Domain\Exception\ServiceUnavailableException;
 use Closure;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Validation\ValidationRule;
@@ -222,5 +223,27 @@ final class ApiExceptionRendererTest extends TestCase
 
         $response->assertStatus(500);
         self::assertStringNotContainsString('application/json', $response->headers->get('Content-Type') ?? '');
+    }
+
+    public function test_a_service_unavailable_domain_exception_is_a_503_envelope(): void
+    {
+        Route::get('/api/v1/__test/unavailable', function (): never {
+            throw new class extends ServiceUnavailableException
+            {
+                public function errorCode(): string
+                {
+                    return 'content.suggestions.unavailable';
+                }
+
+                public function params(): array
+                {
+                    return [];
+                }
+            };
+        });
+
+        $this->getJson('/api/v1/__test/unavailable')
+            ->assertStatus(503)
+            ->assertJsonPath('error.code', 'content.suggestions.unavailable');
     }
 }

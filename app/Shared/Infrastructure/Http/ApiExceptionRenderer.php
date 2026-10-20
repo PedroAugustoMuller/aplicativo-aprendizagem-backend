@@ -75,9 +75,7 @@ final class ApiExceptionRenderer
             $e instanceof MethodNotAllowedHttpException => $this->envelope(
                 405, SystemErrorCode::MethodNotAllowed->value, [], $traceId, 'Method not allowed.', $request,
             ),
-            $e instanceof ThrottleRequestsException => $this->envelope(
-                429, SystemErrorCode::TooManyRequests->value, [], $traceId, 'Too many requests.', $request,
-            ),
+            $e instanceof ThrottleRequestsException => $this->throttled($e, $traceId, $request),
             // Catch-all for any other framework HTTP exception (413, 410, 415, ...)
             // that reaches here with its own status code. Must stay after the more
             // specific HttpException subclasses above, since they all implement
@@ -106,6 +104,21 @@ final class ApiExceptionRenderer
             500, SystemErrorCode::UnexpectedError->value, [], $traceId, 'Unexpected error.', $request,
             alreadyLogged: true,
         );
+    }
+
+    /**
+     * The client cannot read Retry-After cross-origin without an exposed header,
+     * so the wait also travels in params, where the translation can use it.
+     */
+    private function throttled(ThrottleRequestsException $e, string $traceId, Request $request): JsonResponse
+    {
+        $headers = $e->getHeaders();
+        $retryAfter = $headers['Retry-After'] ?? null;
+        $params = is_numeric($retryAfter) ? ['retry_after' => (int) $retryAfter] : [];
+
+        return $this->envelope(
+            429, SystemErrorCode::TooManyRequests->value, $params, $traceId, 'Too many requests.', $request,
+        )->withHeaders($headers);
     }
 
     private function validation(ValidationException $e, string $traceId, Request $request): JsonResponse
