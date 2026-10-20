@@ -59,5 +59,6 @@
         <server name="DB_HOST" value="postgres"/>
         <server name="DB_PORT" value="5432"/>
         <server name="DB_DATABASE" value="quimica_test"/>
+        <server name="AI_PROVIDER" value="fake"/>
     </php>
 </phpunit>

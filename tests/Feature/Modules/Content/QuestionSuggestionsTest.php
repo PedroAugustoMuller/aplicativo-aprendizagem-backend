@@ -38,6 +38,13 @@ final class QuestionSuggestionsTest extends TestCase
         $this->teacherToken = $this->tokenFor($teacher);
     }
 
+    public function test_the_suite_never_talks_to_a_real_ai_whatever_the_local_env_says(): void
+    {
+        // The container's env_file fills $_SERVER, which beats phpunit.xml's <env>:
+        // only a <server> entry keeps a developer's AI_PROVIDER=claude out of the tests.
+        self::assertSame('fake', config('services.ai.provider'));
+    }
+
     public function test_the_teacher_gets_valid_suggestions_and_nothing_is_stored(): void
     {
         $generator = $this->stub([
