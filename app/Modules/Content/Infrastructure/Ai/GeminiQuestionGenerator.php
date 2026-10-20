@@ -89,7 +89,7 @@ final readonly class GeminiQuestionGenerator implements QuestionGenerator
         return SuggestionPayload::questions($items);
     }
 
-    /** @return list<array<string, mixed>> the material (if any) as its own plain-text part, then the instructions */
+    /** @return list<array<string, mixed>> the material (if any) as a titled plain-text part, then the instructions */
     private function parts(SuggestionRequest $request): array
     {
         $material = $this->prompt->material($request);
@@ -99,7 +99,12 @@ final readonly class GeminiQuestionGenerator implements QuestionGenerator
             return [$instructions];
         }
 
-        return [['inlineData' => ['mimeType' => 'text/plain', 'data' => base64_encode($material)]], $instructions];
+        // Gemini parts carry no title: a label part names the document the prompt refers to.
+        return [
+            ['text' => 'Documento anexado: "'.SuggestionPrompt::MATERIAL_TITLE.'"'],
+            ['inlineData' => ['mimeType' => 'text/plain', 'data' => base64_encode($material)]],
+            $instructions,
+        ];
     }
 
     /** Sizes and timings only: never the material, never the key. */

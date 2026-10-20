@@ -77,11 +77,13 @@ final class GeminiQuestionGeneratorTest extends TestCase
         Http::assertSent(function (Request $request): bool {
             $body = $request->data();
 
-            return data_get($body, 'contents.0.parts.0.inlineData.mimeType') === 'text/plain'
-                && base64_decode(self::text($body, 'contents.0.parts.0.inlineData.data'), true) === self::INJECTED
-                && str_contains(self::text($body, 'contents.0.parts.1.text'), 'Tabela Periódica')
-                && ! str_contains(self::text($body, 'contents.0.parts.1.text'), 'Ignore as regras')
-                && ! str_contains(self::text($body, 'contents.0.parts.1.text'), '</source>');
+            // A label naming the document the prompt refers to, then the material, then the instructions.
+            return self::text($body, 'contents.0.parts.0.text') === 'Documento anexado: "Material de base"'
+                && data_get($body, 'contents.0.parts.1.inlineData.mimeType') === 'text/plain'
+                && base64_decode(self::text($body, 'contents.0.parts.1.inlineData.data'), true) === self::INJECTED
+                && str_contains(self::text($body, 'contents.0.parts.2.text'), 'Tabela Periódica')
+                && ! str_contains(self::text($body, 'contents.0.parts.2.text'), 'Ignore as regras')
+                && ! str_contains(self::text($body, 'contents.0.parts.2.text'), '</source>');
         });
     }
 
