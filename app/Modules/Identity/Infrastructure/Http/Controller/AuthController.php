@@ -12,6 +12,7 @@ use App\Modules\Identity\Infrastructure\Http\Request\ChangePasswordRequest;
 use App\Modules\Identity\Infrastructure\Http\Request\LoginRequest;
 use App\Modules\Identity\Infrastructure\Http\Resource\AuthenticatedUserResource;
 use App\Modules\Identity\Infrastructure\Persistence\UserModel;
+use App\Shared\Infrastructure\AiSuggestions;
 use App\Shared\Infrastructure\Persistence\EloquentAttribute;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,12 +43,15 @@ final class AuthController
             abort(Response::HTTP_UNAUTHORIZED);
         }
 
+        $role = EloquentAttribute::string($user->getAttribute('role'), 'users.role');
+
         return new JsonResponse(['data' => [
             'id' => EloquentAttribute::string($user->getKey(), 'users.id'),
             'name' => EloquentAttribute::string($user->getAttribute('name'), 'users.name'),
             'login' => EloquentAttribute::string($user->getAttribute('email') ?? $user->getAttribute('username'), 'users.login'),
-            'role' => EloquentAttribute::string($user->getAttribute('role'), 'users.role'),
+            'role' => $role,
             'must_change_password' => $user->getAttribute('must_change_password') === true,
+            'features' => ['ai_suggestions' => AiSuggestions::enabledFor($role)],
         ]]);
     }
 

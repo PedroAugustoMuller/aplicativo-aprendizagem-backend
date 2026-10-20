@@ -57,7 +57,7 @@
   directly off a narrow Eloquent `select()` — hydrating aggregates just to
   render a list is the cost this read model exists to avoid. See
   `TopicListReader` / `EloquentTopicListReader` for the pattern.
-- Every class is `final` unless it is one of the five abstract
+- Every class is `final` unless it is one of the six abstract
   `DomainException` bases, the abstract `Uuid` value object, or a framework
   base class Laravel itself generated non-final (e.g. `AppServiceProvider`).
 - `declare(strict_types=1);` at the top of every PHP file, no exceptions.
@@ -68,9 +68,11 @@
 
 ## Errors
 
-- Every domain exception extends one of **five** bases: `UnauthenticatedException`
+- Every domain exception extends one of **six** bases: `UnauthenticatedException`
   (401), `ForbiddenException` (403), `NotFoundException` (404),
-  `ConflictException` (409), `BusinessRuleException` (422). The base fixes the
+  `ConflictException` (409), `BusinessRuleException` (422),
+  `ServiceUnavailableException` (503 — an outside service, the AI provider, is
+  off or failing; the request may work later). The base fixes the
   status; a concrete exception never picks its own, so it cannot claim one
   status and return another. 401 and 403 are kept deliberately distinct: the
   frontend clears the session on 401 and never on 403, so a permission denial

@@ -135,4 +135,21 @@ final class RateLimitTest extends TestCase
             ->postJson('/api/v1/auth/login', ['login' => 'ana@escola.br', 'password' => 'wrong'])
             ->assertStatus(429);
     }
+
+    public function test_a_throttled_response_says_when_to_retry(): void
+    {
+        $this->seed(DevelopmentAccountsSeeder::class);
+
+        for ($attempt = 0; $attempt < 5; $attempt++) {
+            $this->postJson('/api/v1/auth/login', ['login' => 'ana@escola.br', 'password' => 'wrong']);
+        }
+
+        $response = $this->postJson('/api/v1/auth/login', ['login' => 'ana@escola.br', 'password' => 'wrong'])
+            ->assertStatus(429);
+
+        $retryAfter = $response->json('error.params.retry_after');
+        self::assertIsInt($retryAfter);
+        self::assertGreaterThan(0, $retryAfter);
+        self::assertSame((string) $retryAfter, $response->headers->get('Retry-After'));
+    }
 }

@@ -196,4 +196,33 @@ final class LoginTest extends TestCase
             'deactivated_at' => $deactivated ? now() : null,
         ]);
     }
+
+    public function test_staff_see_ai_suggestions_when_a_provider_is_configured(): void
+    {
+        config(['services.ai.provider' => 'fake']);
+
+        $login = $this->postJson('/api/v1/auth/login', ['login' => 'bruno@escola.br', 'password' => 'password'])
+            ->assertOk()
+            ->assertJsonPath('data.features.ai_suggestions', true);
+
+        $token = $login->json('data.token');
+        self::assertIsString($token);
+
+        $this->withToken($token)->getJson('/api/v1/auth/me')
+            ->assertOk()
+            ->assertJsonPath('data.features.ai_suggestions', true);
+    }
+
+    public function test_students_and_servers_without_a_provider_do_not(): void
+    {
+        config(['services.ai.provider' => 'fake']);
+        $this->postJson('/api/v1/auth/login', ['login' => 'carla.dias', 'password' => 'password'])
+            ->assertOk()
+            ->assertJsonPath('data.features.ai_suggestions', false);
+
+        config(['services.ai.provider' => '']);
+        $this->postJson('/api/v1/auth/login', ['login' => 'bruno@escola.br', 'password' => 'password'])
+            ->assertOk()
+            ->assertJsonPath('data.features.ai_suggestions', false);
+    }
 }

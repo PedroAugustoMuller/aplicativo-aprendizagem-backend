@@ -40,6 +40,7 @@ final class AuthorizationMatrixTest extends TestCase
         yield 'update question' => ['PUT', '/questions/{question}', self::row(401, 403, 403, 200, 200)];
         yield 'deactivate question' => ['POST', '/questions/{question}/deactivate', self::row(401, 403, 403, 200, 200)];
         yield 'reactivate question' => ['POST', '/questions/{question}/reactivate', self::row(401, 403, 403, 200, 200)];
+        yield 'question suggestions' => ['POST', '/topics/{topic}/question-suggestions', self::row(401, 403, 403, 200, 200)];
         yield 'create subject' => ['POST', '/subjects', self::row(401, 403, 403, 403, 201)];
         yield 'rename subject' => ['PATCH', '/subjects/{subject}', self::row(401, 403, 403, 403, 200)];
         yield 'deactivate subject' => ['POST', '/subjects/{subject}/deactivate', self::row(401, 403, 403, 403, 200)];
@@ -195,6 +196,7 @@ final class AuthorizationMatrixTest extends TestCase
     {
         return match ($uriTemplate) {
             '/subjects' => ['id' => (string) Str::uuid(), 'name' => 'Física '.uniqid()],
+            '/topics/{topic}/question-suggestions' => ['count' => 1, 'types' => ['true_false'], 'difficulty' => 'easy'],
             '/subjects/{subject}' => ['name' => 'Física '.uniqid()],
             '/teachers' => ['id' => (string) Str::uuid(), 'name' => 'Novo Professor', 'email' => uniqid().'@escola.br'],
             '/classrooms' => ['id' => (string) Str::uuid(), 'name' => 'Turma '.uniqid(), 'subject_ids' => [$world['subjectId']]],

@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Modules\Content\Domain\Error\ContentErrorCode;
 use App\Shared\Domain\Error\ErrorCode;
 use App\Shared\Infrastructure\Error\ErrorCodeRegistry;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Symfony\Component\HttpFoundation\Response;
 use UnitEnum;
 
 class AppServiceProvider extends ServiceProvider
@@ -76,6 +79,25 @@ class AppServiceProvider extends ServiceProvider
             $identifier = $request->user()?->getAuthIdentifier();
 
             return Limit::perMinute(5)->by('password|'.(is_string($identifier) ? $identifier : $request->ip()));
+        });
+
+        // "Gerar com IA" spends a provider's free quota: a per-user hour and day
+        // bucket, plus one bucket for the whole school kept under the free tier.
+        // A teacher's own buckets count only generations that produced
+        // suggestions, so retrying through a provider outage costs them nothing;
+        // the school's bucket counts every call that reached the provider.
+        RateLimiter::for('ai-suggestions', function (Request $request): array {
+            $identifier = $request->user()?->getAuthIdentifier();
+            $user = is_string($identifier) ? $identifier : (string) $request->ip();
+            $generated = static fn (Response $response): bool => $response->getStatusCode() === 200;
+            $reachedProvider = static fn (Response $response): bool => in_array($response->getStatusCode(), [200, 503], true)
+                || str_contains((string) $response->getContent(), ContentErrorCode::SuggestionsEmpty->value);
+
+            return [
+                Limit::perHour(Config::integer('services.ai.limits.per_user_hour'))->by('ai-hour|'.$user)->after($generated),
+                Limit::perDay(Config::integer('services.ai.limits.per_user_day'))->by('ai-day|'.$user)->after($generated),
+                Limit::perDay(Config::integer('services.ai.limits.global_day'))->by('ai-global')->after($reachedProvider),
+            ];
         });
     }
 }
