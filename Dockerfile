@@ -1,7 +1,7 @@
 # Stages: base (PHP + extensions) → production (code baked in) → development
 # (bind-mounted code, host UID). development stays LAST so the dev compose,
 # which names no target, keeps building it.
-FROM php:8.4-fpm-bookworm AS base
+FROM php:8.4.27-fpm-bookworm AS base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libzip-dev zip unzip \
